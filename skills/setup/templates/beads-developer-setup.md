@@ -2,6 +2,16 @@
 
 This guide helps you set up BEADS (Bug/Enhancement Agent Delegation System) on your local machine for multi-agent orchestration with Claude Code.
 
+## BEADS authority (read this first)
+
+> Read the repo's local beads guide before backend-specific sync/storage commands.
+>
+> Check the backend/location first: bd where --json
+>
+> If the repo already has a custom BEADS setup, do not use metaswarm's stock BEADS templates, config, or assumptions as a replacement; follow the repo-local/custom setup.
+
+The setup steps, storage layout (`.beads/issues.jsonl`), and sync commands below are **examples only**, not defaults. A repo may be legacy JSONL, Dolt-backed, or use a repo-specific shared `BEADS_DIR` workflow. Inspect the actual backend/location with `bd where --json` and follow the repo-local guidance before running any backend-specific sync or storage command.
+
 ## Prerequisites
 
 - **Claude Code** installed and configured

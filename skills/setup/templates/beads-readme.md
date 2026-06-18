@@ -8,6 +8,16 @@ Beads is issue tracking that lives in your repo, making it perfect for AI coding
 
 **Learn more:** [github.com/steveyegge/beads](https://github.com/steveyegge/beads)
 
+## BEADS authority (read this first)
+
+> Read the repo's local beads guide before backend-specific sync/storage commands.
+>
+> Check the backend/location first: bd where --json
+>
+> If the repo already has a custom BEADS setup, do not use metaswarm's stock BEADS templates, config, or assumptions as a replacement; follow the repo-local/custom setup.
+
+The commands and storage conventions below (e.g. `.beads/issues.jsonl`, `bd sync`, auto-sync-with-commits) are **examples only**, not defaults. A repo may be legacy JSONL, Dolt-backed, or use a repo-specific shared `BEADS_DIR` workflow — confirm with `bd where --json` and the repo-local guide before running any backend-specific operation.
+
 ## Quick Start
 
 ### Essential Commands

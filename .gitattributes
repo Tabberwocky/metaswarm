@@ -1,3 +1,10 @@
-
-# Use bd merge for beads JSONL files
-.beads/issues.jsonl merge=beads
+# LEGACY ONLY — do NOT treat as a default recommendation.
+# This JSONL merge-driver line applies only to repos using the legacy
+# .beads/issues.jsonl storage model. Many repos use a custom BEADS setup
+# (e.g. Dolt-backed or a shared BEADS_DIR) where this line is wrong.
+# Check the repo's local BEADS guide and `bd where --json` before assuming
+# any storage/merge behavior. If the repo already has a custom BEADS setup,
+# do not use metaswarm's stock templates/config/assumptions as a replacement.
+#
+# Use bd merge for beads JSONL files (legacy JSONL storage only):
+# .beads/issues.jsonl merge=beads

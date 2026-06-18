@@ -23,6 +23,8 @@ Before starting any new task:
 
 **Knowledge Priming (CRITICAL)**:
 
+- [ ] Read the repo's local BEADS docs/skills before any backend-specific BEADS operation; check the backend/location first with `bd where --json`
+- [ ] If the repo already has a BEADS setup, do NOT use metaswarm's stock BEADS templates/config as the source of truth; follow the repo-local/custom setup instead
 - [ ] Run BEADS prime: `bd prime --keywords "<task-keywords>" --work-type planning`
 - [ ] Review MUST FOLLOW rules and GOTCHAS before proceeding
 - [ ] Note any relevant patterns or decisions that constrain the approach

@@ -4,4 +4,6 @@ prompt = """Invoke the metaswarm start-task skill. The user wants to begin track
 Arguments provided by the user: {{args}}
 
 Follow the start-task workflow: Pre-Task Checklist, Task Assessment, route to Simple or Complex flow.
+
+If the repo already has a BEADS setup, do not use metaswarm's stock BEADS templates or assumptions; follow the repo-local/custom setup.
 """
