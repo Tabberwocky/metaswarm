@@ -168,9 +168,22 @@ Recommend: FIX_NOW or CREATE_ISSUE
 
 #### For CREATE_ISSUE
 
-1. Create GitHub issue with context
-2. Reply: "Created issue #<number> to track this."
+1. File the deferred item via the **Deferred-Feedback Capture Protocol** below (creates the cross-linked bead + GitHub issue).
+2. Reply: "Created issue #<number> (tracked as <bead-id>); resolving thread."
 3. Resolve the thread
+
+#### Deferred-Feedback Capture Protocol
+
+This is the canonical capture flow for **valuable** deferred bot feedback — out-of-scope or not-now but worth tracking. The Phase 2a "deferred valuable feedback" pointer resolves here. (Dismissed false-positives and pure nits get no tracking item — see Phase 2a.)
+
+Follow the canonical rule at `~/.claude/rules/no-silent-drops.md` § "Tracking-item protocol". The essentials an agent must apply here:
+
+- **Always create BOTH a bead AND a GitHub issue, cross-linked bidirectionally.** The bead body holds the issue URL, *and* the issue body holds the bead id — the cross-link runs both directions (bead ↔ issue), not just bead → issue.
+- **The bead**: title derived from the finding; body with the original bot comment text + file paths + the GitHub issue URL; priority from the Phase 2a likelihood × impact assessment; labels `bot-feedback` and `deferred`.
+- **The issue**: context for the finding, plus the **bead id in the issue body** (the reverse half of the cross-link).
+- **Delegate the filing when it's cheaper**: dispatch a low-cost subagent (Haiku/Sonnet-class — the work is mechanical) to create the bead + issue and return the issue # and bead id, whenever the orchestrating agent is on an expensive model / high effort, or filing inline would pile unneeded context onto it. File inline only when dispatch overhead would exceed the savings.
+
+This ensures valuable out-of-scope feedback survives PR closure and is discoverable by future agents via `bd ready` or `bd search`, with the GitHub issue and bead pointing at each other.
 
 ### Phase 3: Make Fixes
 
