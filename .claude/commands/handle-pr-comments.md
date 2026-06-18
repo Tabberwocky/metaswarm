@@ -60,7 +60,7 @@ REPEAT until (all_threads_resolved AND no_new_comments AND no_new_reviews_after_
   6. Respond to EVERY thread individually
   6b. For "Outside diff range" comments: leave a general PR comment acknowledging
   7. CRITICAL: WAIT FOR CI/CD, then RE-CHECK for NEW comments/reviews
-     - Monitor CI/CD pipeline: `gh pr checks $PR_NUMBER --watch`
+     - Monitor the CI/CD pipeline via the `Monitor` tool — see the pr-shepherd skill for the canonical script. Monitor fires events only on state change (0 tokens during quiet periods).
      - Wait until ALL checks complete (not just pass - complete)
      - Automated reviewers (CodeRabbit) post comments during/after their check
      - Check BOTH inline threads AND review bodies for new feedback
@@ -496,10 +496,12 @@ gh api "/repos/$OWNER/$REPO_NAME/pulls/$PR_NUMBER/comments/$COMMENT_ID/replies" 
 
 **CRITICAL**: After EVERY push, you MUST check for NEW comments before declaring complete.
 
-```bash
+Use the `Monitor` tool to watch for CI/CD state changes — see the pr-shepherd skill for the canonical script. Monitor fires events only on state change (0 tokens during quiet periods), vs. `/loop 5m` which fires every 5 minutes regardless.
+
+```text
 PR_NUMBER=XXX
-echo "Waiting for CI/CD checks to complete..."
-gh pr checks $PR_NUMBER --watch
+# Invoke the Monitor tool against PR_NUMBER (canonical script lives in the pr-shepherd skill).
+# It emits a chat event whenever CI status, comments, or reviews change, and exits on READY_TO_MERGE.
 ```
 
 Then re-check for new comments using the workflow in Section 1.

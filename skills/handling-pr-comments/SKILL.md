@@ -183,10 +183,11 @@ gh api graphql -f query='mutation {
 Automated reviewers (CodeRabbit, Cursor) analyze EVERY commit you push. They post NEW comments during/after their check runs.
 
 ```bash
-# STEP 1: Wait for ALL CI/CD checks to complete
+# STEP 1: Watch for ALL CI/CD checks to complete via the Monitor tool
 PR_NUMBER=<number>
-echo "Waiting for CI/CD checks to complete..."
-gh pr checks $PR_NUMBER --watch
+# Use the Monitor tool to watch for state changes (see the pr-shepherd skill for the canonical script).
+# Monitor streams events only on state change, so quiet periods cost 0 tokens — strictly cheaper than
+# blocking the agent on CI completion or waking it on a fixed polling interval.
 
 # STEP 2: Check for NEW comments since your last response
 OWNER=$(gh repo view --json owner -q .owner.login)
@@ -233,7 +234,7 @@ REPEAT:
   Phase 4: Respond
   Phase 5: Resolve threads
   Phase 6: Handle unclear threads
-  Phase 7: Check for NEW comments after push
+  Phase 7: Check for NEW comments after push (use Monitor to watch for new reviews/comments)
 
   IF new comments found → GO TO Phase 1
   IF no new comments → proceed to verification

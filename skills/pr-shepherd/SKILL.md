@@ -87,7 +87,7 @@ MONITORING → FIXING → MONITORING → WAITING_FOR_USER → FIXING → MONITOR
 
 | State              | What Happens                                | Exit When                                      |
 | ------------------ | ------------------------------------------- | ---------------------------------------------- |
-| `MONITORING`       | Poll CI and reviews every 60s in background | CI fails, new comments, all done, or need help |
+| `MONITORING`       | Watch CI and reviews via the `Monitor` tool — it streams events only on state change (see § Monitoring via the Monitor tool below) | CI fails, new comments, all done, or need help |
 | `FIXING`           | Fix issues using TDD, run local validation  | Local validation passes OR need user guidance  |
 | `HANDLING_REVIEWS` | Invoke `handling-pr-comments` skill         | Comments handled OR need user input            |
 | `WAITING_FOR_USER` | Present options, wait for user decision     | User responds                                  |
@@ -112,7 +112,56 @@ echo "Shepherding PR #$PR_NUMBER"
 
 ## Phase 2: Monitoring Loop (Background)
 
-Run GTG every 60 seconds as the **single source of truth** for PR readiness:
+### Monitoring via the Monitor tool (not `/loop`)
+
+`Monitor` runs a shell script in the background and emits a chat notification **only when the script writes a stdout line**. That means quiet periods — CI still running, no new comments — cost zero agent tokens. It is strictly cheaper than `/loop <interval>` for PR shepherding because:
+
+1. Monitor fires on actual state change; `/loop` fires every N minutes regardless.
+2. Each Monitor event is a single JSON line (~150 bytes); each `/loop` firing replays the full user prompt.
+3. Events that cluster within a few minutes stay inside the 5-minute prompt-cache TTL; `/loop 5m` lands exactly on the cache boundary.
+
+**Canonical PR-state monitor**:
+
+```
+Monitor({
+  description: "PR $PR_NUMBER state changes",
+  timeout_ms: 900000,   // 15 min; re-arm if work still in progress
+  persistent: false,
+  command: `prev=""
+while true; do
+  snapshot=$(gh pr view $PR_NUMBER --json statusCheckRollup,mergeStateStatus,comments,reviews 2>/dev/null | jq -c '{
+    checks: [.statusCheckRollup[] | {name: (.name // .context), status: (.status // .state), conclusion}],
+    merge: .mergeStateStatus,
+    commentCount: (.comments | length),
+    reviewCount: (.reviews | length)
+  }' 2>/dev/null || echo "POLL_FAIL")
+  if [ "$snapshot" != "$prev" ] && [ -n "$snapshot" ]; then
+    echo "[$(date -u +%H:%M:%SZ)] $snapshot"
+    prev="$snapshot"
+    checkLen=$(echo "$snapshot" | jq -r '.checks | length' 2>/dev/null || echo "0")
+    running=$(echo "$snapshot" | jq -r '[.checks[] | select(.status == "IN_PROGRESS" or .status == "PENDING" or .status == "QUEUED" or .status == "EXPECTED")] | length' 2>/dev/null || echo "1")
+    merge=$(echo "$snapshot" | jq -r '.merge' 2>/dev/null || echo "")
+    if [ "$checkLen" -gt "0" ] && [ "$running" = "0" ] && [ "$merge" = "CLEAN" ]; then
+      echo "READY_TO_MERGE"
+      exit 0
+    fi
+  fi
+  sleep 30
+done`
+})
+```
+
+**Behavior:**
+
+- Fires on every state change (check flip, new comment, new review, merge-state change).
+- Exits cleanly on `READY_TO_MERGE` (all checks terminal AND `merge === "CLEAN"`).
+- Times out after 15 minutes — re-arm with a fresh `Monitor` call if work is still in progress.
+
+**Re-arm after each push**: Pushing a new commit makes the previous Monitor exit on a transient "empty checks" state between the old and new CI runs. Just call `Monitor` again with the same script — it picks up the new run cycle.
+
+**When NOT to use Monitor**: Truly periodic tasks that should fire on a schedule regardless of state (e.g., "summarize the inbox every hour"). Those stay on `/loop`.
+
+Run GTG inside a `Monitor` watch script as the **single source of truth** for PR readiness:
 
 ### Primary Check: GTG (Good-To-Go)
 
@@ -139,9 +188,9 @@ CI_STATE=$(echo "$GTG_RESULT" | jq -r '.ci_status.state')
 | `ACTION_REQUIRED`    | Actionable comments need fixes     | → HANDLING_REVIEWS (use `action_items`)   |
 | `UNRESOLVED_THREADS` | Review threads still open          | → HANDLING_REVIEWS                        |
 | `CI_FAILING`         | One or more CI checks failing      | → FIXING                                  |
-| `ERROR`              | Couldn't fetch PR data             | Retry after 60s, escalate after 3 retries |
+| `ERROR`              | Couldn't fetch PR data             | Retry on the next Monitor event; escalate after 3 consecutive ERROR events |
 
-**GTG reports, agents act**: GTG does not resolve threads or fix code — it only tells you what's blocking. After addressing feedback, you must resolve threads yourself using the GraphQL mutation in `handle-pr-comments.md` (Section 3). GTG will report `READY` on the next poll once threads are resolved.
+**GTG reports, agents act**: GTG does not resolve threads or fix code — it only tells you what's blocking. After addressing feedback, you must resolve threads yourself using the GraphQL mutation in `handle-pr-comments.md` (Section 3). GTG will report `READY` on the next Monitor event once threads are resolved.
 
 ### Evaluate State Transitions
 

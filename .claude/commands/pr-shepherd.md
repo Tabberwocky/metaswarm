@@ -16,7 +16,7 @@ If no PR number is provided, uses the PR associated with the current branch.
 
 ## What This Does
 
-1. **Monitors CI/CD** - Polls every 60 seconds for status changes
+1. **Monitors CI/CD** - Watches for state changes via the `Monitor` tool (event-driven, not fixed-interval)
 2. **Monitors Reviews** - Watches for new comments and unresolved threads
 3. **Auto-fixes simple issues** - Lint, prettier, type errors
 4. **Asks before complex fixes** - Presents options with pros/cons for approval
@@ -38,7 +38,7 @@ If no PR number is provided, uses the PR associated with the current branch.
 2. **Activate the pr-shepherd skill**:
    Load and follow the pr-shepherd skill definition.
 
-3. **Begin monitoring loop** (background, every 60s):
+3. **Begin monitoring via the `Monitor` tool** (see the pr-shepherd skill for the canonical script):
    - Check CI status
    - Check for new review comments
    - Check unresolved thread count
@@ -65,7 +65,7 @@ If no PR number is provided, uses the PR associated with the current branch.
 > - CI: Running (2/5 checks complete)
 > - Threads: 0 unresolved
 >
-> Monitoring... (will check every 60 seconds)
+> Monitoring... (events arrive on state change)
 ```
 
 ## Notes
