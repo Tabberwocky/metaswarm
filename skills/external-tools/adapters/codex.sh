@@ -115,8 +115,8 @@ cmd_implement() {
     env -i \
       HOME="$HOME" \
       PATH="$PATH" \
-      OPENAI_API_KEY="${OPENAI_API_KEY:-}" \
-      CODEX_API_KEY="${CODEX_API_KEY:-}" \
+      ${OPENAI_API_KEY:+OPENAI_API_KEY="$OPENAI_API_KEY"} \
+      ${CODEX_API_KEY:+CODEX_API_KEY="$CODEX_API_KEY"} \
     "$TOOL_CMD" exec --full-auto --json -C "$XT_WORKTREE" "$prompt_content" \
     || exit_code=$?
 
@@ -312,8 +312,8 @@ PROMPT_FOOTER
     env -i \
       HOME="$HOME" \
       PATH="$PATH" \
-      OPENAI_API_KEY="${OPENAI_API_KEY:-}" \
-      CODEX_API_KEY="${CODEX_API_KEY:-}" \
+      ${OPENAI_API_KEY:+OPENAI_API_KEY="$OPENAI_API_KEY"} \
+      ${CODEX_API_KEY:+CODEX_API_KEY="$CODEX_API_KEY"} \
     "$TOOL_CMD" exec --sandbox read-only --json -C "$XT_WORKTREE" "$review_prompt" \
     || exit_code=$?
 
