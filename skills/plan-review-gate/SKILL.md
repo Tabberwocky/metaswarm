@@ -392,6 +392,7 @@ Plan is ready for user review.
 ### Downstream (after gate approval)
 
 - Plan presented to user for final approval
+- **Downstream DAG Validation (before execution):** if the plan has 4+ WUs OR any claimed parallelism (e.g. "parallel with", "WU-X ‖ WU-Y", simultaneously-dispatched subagents), invoke `/decompose:decompose` as a sibling gate between plan-review-gate PASS and execution kickoff. For 2–3 WU linear plans, decompose is agent-judged — run it when the agent believes the plan carries structural risk (cross-WU data flow, synthesis required, integration with existing systems), skip it for trivially sequential plans. This is NOT a 4th reviewer — it's a constructive DAG trace that catches defects plan-review-gate's per-WU lens misses (hidden circularity, cross-WU output-contract contradictions, missing synthesis nodes, handwave dependencies). Empirical evidence: jb1-un0e plan-review-gate PASSED 3/3, `/decompose` found 8 structural issues (2 blocking) — see `docs/gates/decompose-vs-plan-review.md`. Decompose findings land in the plan's frontmatter under `decompose-gate:` alongside the existing `plan-review-gate:` block.
 - **After user approval**: Persist the approved plan to `.beads/plans/active-plan.md` (see Section: Plan Persistence below)
 - User-approved plan flows to `orchestrated-execution` for the 4-phase execution loop
 - Work unit decomposition and implementation begin

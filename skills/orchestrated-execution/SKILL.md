@@ -57,11 +57,13 @@ Before submitting a plan to the Design Review Gate, the orchestrator MUST verify
 - [ ] Error handling strategy specified (typed error hierarchy, how errors cross layer boundaries)
 - [ ] No hard-coded configuration — environment variables for all external service config
 
-### Dependency Graph Checklist
-- [ ] Each WU's dependencies are minimal (only depends on what it actually imports/uses)
-- [ ] No unnecessary serialization — WUs that CAN be parallel ARE marked parallel
-- [ ] No circular dependencies
-- [ ] Integration WUs exist to wire components into the app shell (not just built in isolation)
+### Dependency Graph Validation (`/decompose`)
+
+- [ ] If the plan has 4+ WUs OR claims parallelism, invoke `/decompose:decompose` against the plan file. The DAG trace verifies all four properties (minimal deps, genuine parallelism, no cycles, integration nodes present) via data-flow analysis rather than orchestrator self-certification.
+- [ ] For 2–3 WU linear plans, decompose is agent-judged. Run it if the plan has cross-WU data flow, synthesis requirements, or non-trivial integration; skip it for trivially sequential work.
+- [ ] Findings classified `blocking` or `major` MUST be applied inline to the plan before execution begins. Minor findings go in plan frontmatter under `decompose-gate:`. Nit findings may be skipped per the decompose skill's own tier guidance.
+- [ ] If `/decompose` was already run upstream during the plan-review-gate handoff (see `plan-review-gate/SKILL.md § Downstream DAG Validation`), cite its output in the plan frontmatter; do not re-run.
+- [ ] No `plan-review-gate` re-run is needed after applying decompose fixes — the fixes tighten structure, not intent. Plan-review has already validated intent.
 
 ### API Contract Checklist
 If the plan includes HTTP endpoints or WebSocket protocols, verify:

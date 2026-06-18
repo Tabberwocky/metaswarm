@@ -161,10 +161,11 @@ When the task has a spec with Definition of Done items, use the orchestrated exe
 
 1. **Create implementation plan** — decompose into work units with DoD items, file scopes, dependencies
 2. **Plan Review Gate (BLOCKING)** — submit plan to adversarial review (3 reviewers: Feasibility, Completeness, Scope & Alignment must all PASS). This gate is MANDATORY — do NOT present the plan to the user or begin implementation until all 3 reviewers PASS. See `skills/plan-review-gate/SKILL.md`
-3. **Execute** the 4-phase loop per work unit: IMPLEMENT → VALIDATE → ADVERSARIAL REVIEW → COMMIT
-4. **Final review** after all work units: cross-unit integration check
-5. **Self-reflect**: Run `/self-reflect` to extract learnings, then commit knowledge base updates
-6. **Create PR** — knowledge base changes are included in the PR
+3. **DAG Validation Gate (`/decompose`)** — for plans with 4+ WUs OR any claimed parallelism, invoke `/decompose:decompose` on the plan text approved by step 2. Catches structural defects plan-review-gate's per-WU lens misses: hidden circularity, cross-WU output-contract contradictions, missing synthesis nodes, handwave dependencies. For 2–3 WU linear plans, agent-judged — run it when the plan has cross-WU data flow, synthesis requirements, or non-trivial integration. Apply `blocking` and `major` findings inline before execution begins; minor findings go in plan frontmatter under `decompose-gate:`. Do NOT re-run plan-review-gate after applying fixes — structural tightenings don't change intent. See `docs/gates/decompose-vs-plan-review.md` for empirical evidence (jb1-un0e: plan-review PASSED 3/3, decompose then found 2 blocking structural issues).
+4. **Execute** the 4-phase loop per work unit: IMPLEMENT → VALIDATE → ADVERSARIAL REVIEW → COMMIT
+5. **Final review** after all work units: cross-unit integration check
+6. **Self-reflect**: Run `/self-reflect` to extract learnings, then commit knowledge base updates
+7. **Create PR** — knowledge base changes are included in the PR
 
 See the `orchestrated-execution` skill for the full pattern. Key principles:
 - **Trust nothing, verify everything**: Run quality gates independently, never trust subagent self-reports
