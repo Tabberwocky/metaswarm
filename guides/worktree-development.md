@@ -50,13 +50,13 @@ From the **main repository** (not from another worktree):
 
 ```bash
 # Create a worktree with a new branch
-git worktree add ~/Developer/<project>-worktrees/<agent-name> -b feature/<feature-name>
+git worktree add ~/Coding/.worktrees/<repo>/<branch> -b feature/<feature-name>
 
 # Create a worktree from an existing branch
-git worktree add ~/Developer/<project>-worktrees/<agent-name> feature/<existing-branch>
+git worktree add ~/Coding/.worktrees/<repo>/<branch> feature/<existing-branch>
 
 # Create a worktree from a specific commit (detached HEAD)
-git worktree add ~/Developer/<project>-worktrees/<agent-name> <commit-sha>
+git worktree add ~/Coding/.worktrees/<repo>/<branch> <commit-sha>
 ```
 
 ### Directory Structure
@@ -64,25 +64,26 @@ git worktree add ~/Developer/<project>-worktrees/<agent-name> <commit-sha>
 Establish a consistent directory layout:
 
 ```text
-~/Developer/
+~/Coding/
 +-- my-project/                        # Main repository (hub)
 |   +-- .claude/
 |   |   +-- handoffs/                  # Handoff documents between agents
 |   +-- guides/                        # Project guides
 |   +-- src/                           # Source code
-+-- my-project-worktrees/             # All worktrees live here
-    +-- agent-1/                       # Worktree for agent 1
-    |   +-- .claude/
-    |   |   +-- handoffs/
-    |   +-- src/
-    +-- agent-2/                       # Worktree for agent 2
-    +-- hotfix/                        # Worktree for hotfix
++-- .worktrees/
+    +-- my-project/                    # All worktrees for this repo live here
+        +-- agent-1/                   # Worktree for agent 1 (branch name)
+        |   +-- .claude/
+        |   |   +-- handoffs/
+        |   +-- src/
+        +-- agent-2/                   # Worktree for agent 2
+        +-- hotfix/                    # Worktree for hotfix
 ```
 
 Rules:
 
-- All worktrees live in a sibling directory named `<project>-worktrees/`
-- Each worktree gets a descriptive name (agent name, feature name, or purpose)
+- All worktrees live outside the repo tree under `~/Coding/.worktrees/<repo>/` to prevent recursive checkout loops
+- Each worktree gets a descriptive name matching the branch name
 - The main repository is always the orchestration hub
 
 ### Post-Setup
@@ -90,7 +91,7 @@ Rules:
 After creating a worktree, install dependencies:
 
 ```bash
-cd ~/Developer/<project>-worktrees/<agent-name>
+cd ~/Coding/.worktrees/<repo>/<branch>
 npm install  # or pnpm install, yarn install
 ```
 
@@ -135,8 +136,8 @@ WORKTREE_NAME="$1"
 BRANCH_NAME="$2"
 PROJECT_DIR="$(git rev-parse --show-toplevel)"
 PROJECT_NAME="$(basename "$PROJECT_DIR")"
-WORKTREE_BASE="$(dirname "$PROJECT_DIR")/${PROJECT_NAME}-worktrees"
-WORKTREE_PATH="${WORKTREE_BASE}/${WORKTREE_NAME}"
+WORKTREE_BASE="${HOME}/Coding/.worktrees/${PROJECT_NAME}"
+WORKTREE_PATH="${WORKTREE_BASE}/${BRANCH_NAME}"
 
 # Create worktree directory
 mkdir -p "$WORKTREE_BASE"
@@ -168,13 +169,13 @@ echo "Worktree ready at: $WORKTREE_PATH"
 1. **Create the worktree** from the main repository:
 
    ```bash
-   git worktree add ~/Developer/<project>-worktrees/<name> -b feature/<feature>
+   git worktree add ~/Coding/.worktrees/<repo>/<branch> -b feature/<feature>
    ```
 
 2. **Navigate and set up**:
 
    ```bash
-   cd ~/Developer/<project>-worktrees/<name>
+   cd ~/Coding/.worktrees/<repo>/<branch>
    npm install
    ```
 
@@ -252,11 +253,11 @@ Task({
   subagent_type: "general-purpose",
   run_in_background: true,
   prompt: `
-You are working in a git worktree at /path/to/<project>-worktrees/feat-x
+You are working in a git worktree at ~/Coding/.worktrees/<repo>/feat-x
 on branch feature/x.
 
 IMPORTANT: Change to the worktree directory first:
-cd /path/to/<project>-worktrees/feat-x
+cd ~/Coding/.worktrees/<repo>/feat-x
 
 Your task: [Detailed task description]
 
@@ -506,7 +507,7 @@ When two worktrees modify the same files:
 1. **Merge the simpler/smaller change first**
 2. **Rebase the remaining worktree on updated main**:
    ```bash
-   cd ~/Developer/<project>-worktrees/<remaining-agent>
+   cd ~/Coding/.worktrees/<repo>/<branch>
    git fetch origin
    git rebase origin/main
    # Resolve conflicts
@@ -535,7 +536,7 @@ After a PR is merged:
 
 ```bash
 # Remove the worktree
-git worktree remove ~/Developer/<project>-worktrees/<agent-name>
+git worktree remove ~/Coding/.worktrees/<repo>/<branch>
 
 # Delete the feature branch
 git branch -d feature/<feature-name>
@@ -551,11 +552,11 @@ git worktree prune
 git checkout main && git pull origin main
 
 # 2. Clean up old worktrees
-git worktree remove ~/Developer/<project>-worktrees/<old-agent>
+git worktree remove ~/Coding/.worktrees/<repo>/<old-branch>
 git branch -d <old-branch>
 
 # 3. Create fresh worktrees for new layer
-git worktree add ~/Developer/<project>-worktrees/<new-agent> -b feat/<new-story> main
+git worktree add ~/Coding/.worktrees/<repo>/<new-branch> -b feat/<new-story> main
 
 # 4. Launch agents, pipeline PRs as they complete
 
@@ -630,7 +631,7 @@ npm run build
 
 ```bash
 # Create a new branch for this worktree
-git worktree add ~/Developer/<project>-worktrees/<name> -b <new-branch-name>
+git worktree add ~/Coding/.worktrees/<repo>/<new-branch-name> -b <new-branch-name>
 
 # Or check out a different branch in the existing worktree first
 ```
@@ -646,7 +647,7 @@ git worktree add ~/Developer/<project>-worktrees/<name> -b <new-branch-name>
 git worktree list
 
 # Remove a stale worktree
-git worktree remove ~/Developer/<project>-worktrees/<old-name>
+git worktree remove ~/Coding/.worktrees/<repo>/<old-branch>
 
 # Prune worktree references for manually deleted directories
 git worktree prune

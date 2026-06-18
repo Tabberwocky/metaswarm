@@ -265,7 +265,7 @@ swarm:
   conflict_detection: true
 
   worktree_config:
-    base_dir: "../your-project-worktrees"
+    base_dir: "~/Coding/.worktrees/<repo>"
     naming_pattern: "agent-{n}"
     port_range: [3001, 3010]
     redis_prefix: "worktree_{n}"
