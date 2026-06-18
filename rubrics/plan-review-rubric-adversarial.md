@@ -38,7 +38,7 @@ Every issue found is classified as BLOCKING or WARNING:
 | **BLOCKING** | Contract violation — plan claims X, codebase says otherwise, or user asked for X and plan omits it | Causes FAIL |
 | **WARNING** | Quality concern — not a contract violation but worth noting | Does NOT cause FAIL |
 
-**When in doubt, it's BLOCKING.** The threshold for PASS should be high. Err on the side of FAIL.
+**Calibrate by severity — do not blanket-block.** Before classifying, load `${CLAUDE_PLUGIN_ROOT}/rubrics/reviewer-calibration-rubric.md` and assign each finding a class (Critical / Major / Minor / Nit / Follow-up / Acceptable-as-is) via likelihood × impact. FAIL is limited to in-scope Critical/Major feasibility, completeness, or scope defects (BLOCKING ↔ Critical/Major). Lower-severity concerns are non-blocking (WARNING ↔ Minor/Follow-up/Acceptable-as-is) — record them, don't FAIL on them. When genuinely uncertain whether a finding is in scope or severe, default to the *lower* blocking weight, not the higher.
 
 ---
 

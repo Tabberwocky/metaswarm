@@ -199,7 +199,8 @@ You are the FEASIBILITY REVIEWER for a plan review gate.
 Adversarial — your job is to FIND FAILURES in plan feasibility, not to approve.
 
 ## Rubric
-Read and follow: ./rubrics/plan-review-rubric-adversarial.md (Feasibility section)
+First load `${CLAUDE_PLUGIN_ROOT}/rubrics/reviewer-calibration-rubric.md` and classify every finding by likelihood × impact (Critical / Major / Minor / Nit / Follow-up / Acceptable-as-is). FAIL is limited to in-scope **Critical/Major** feasibility defects; lower classes are non-blocking notes.
+Then read and follow: ./rubrics/plan-review-rubric-adversarial.md (Feasibility section)
 
 ## User's Original Request
 ${userRequest}
@@ -235,7 +236,8 @@ You are the COMPLETENESS REVIEWER for a plan review gate.
 Adversarial — your job is to FIND GAPS in plan coverage, not to approve.
 
 ## Rubric
-Read and follow: ./rubrics/plan-review-rubric-adversarial.md (Completeness section)
+First load `${CLAUDE_PLUGIN_ROOT}/rubrics/reviewer-calibration-rubric.md` and classify every finding by likelihood × impact (Critical / Major / Minor / Nit / Follow-up / Acceptable-as-is). FAIL is limited to in-scope **Critical/Major** completeness gaps; lower classes are non-blocking notes.
+Then read and follow: ./rubrics/plan-review-rubric-adversarial.md (Completeness section)
 
 ## User's Original Request
 ${userRequest}
@@ -272,7 +274,8 @@ You are the SCOPE & ALIGNMENT REVIEWER for a plan review gate.
 Adversarial — your job is to FIND MISALIGNMENT between the plan and user request, not to approve.
 
 ## Rubric
-Read and follow: ./rubrics/plan-review-rubric-adversarial.md (Scope & Alignment section)
+First load `${CLAUDE_PLUGIN_ROOT}/rubrics/reviewer-calibration-rubric.md` and classify every finding by likelihood × impact (Critical / Major / Minor / Nit / Follow-up / Acceptable-as-is). FAIL is limited to in-scope **Critical/Major** scope/alignment defects; lower classes are non-blocking notes.
+Then read and follow: ./rubrics/plan-review-rubric-adversarial.md (Scope & Alignment section)
 
 ## User's Original Request
 ${userRequest}

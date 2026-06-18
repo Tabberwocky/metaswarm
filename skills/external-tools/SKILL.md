@@ -158,6 +158,8 @@ The key advantage of external tools: the writer is always reviewed by a **differ
 
 Review is invoked via the adapter's `review` command. The orchestrator reads the reviewer's raw log and evaluates it independently -- the adapter never returns a pass/fail verdict.
 
+**Calibration before verdict.** When the orchestrator interprets the reviewer's log, it MUST first load `${CLAUDE_PLUGIN_ROOT}/rubrics/reviewer-calibration-rubric.md` and classify each reported finding by likelihood × impact (Critical / Major / Minor / Nit / Follow-up / Acceptable-as-is). Cross-model disagreement is preserved and reported, but the review FAILs **only** on in-scope **Critical/Major** defects; speculative or stylistic divergence between models is non-blocking (Minor/Follow-up/Acceptable-as-is). This calibration layers on top of `external-tool-review-rubric.md`.
+
 ### Phase 4: COMMIT (Unchanged)
 
 After passing adversarial review:

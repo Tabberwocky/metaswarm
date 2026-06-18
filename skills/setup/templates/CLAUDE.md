@@ -67,6 +67,10 @@ The validation phase of orchestrated execution reads `.coverage-thresholds.json`
 - **Plan Review Gate**: Automatic adversarial review after any implementation plan is drafted. Spawns 3 independent reviewers (Feasibility, Completeness, Scope & Alignment) in parallel — ALL must PASS before the plan is presented to the user. See `skills/plan-review-gate/SKILL.md`
 - **Coverage Gate**: Reads `.coverage-thresholds.json` and runs the enforcement command — BLOCKING gate before PR creation
 
+### Reviewer Severity Calibration
+
+All automated review gates (design, plan, adversarial implementation, cross-model) load `${CLAUDE_PLUGIN_ROOT}/rubrics/reviewer-calibration-rubric.md` before classifying findings. Each finding is graded by likelihood × impact into one of **Critical / Major / Minor / Nit / Follow-up / Acceptable-as-is**. Only in-scope **Critical/Major** findings are blocking (FAIL / NEEDS_REVISION); Minor/Nit are non-blocking notes, Follow-up items are tracked, and Acceptable-as-is closes a concern out. Reviewers do not blanket-block on uncertainty — when unsure, they default to the lower severity. Repo-local overlays may layer stricter rules on top of this baseline.
+
 ## Workflow Enforcement (MANDATORY)
 
 These rules override any conflicting instructions from third-party skills or plugins. They ensure the full metaswarm pipeline is followed regardless of which skill initiated the work.

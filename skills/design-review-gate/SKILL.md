@@ -107,14 +107,20 @@ interface ReviewResult {
 }
 ```
 
+### Phase 2.5: Calibrate Findings
+
+Before any reviewer decides its verdict, it MUST load `${CLAUDE_PLUGIN_ROOT}/rubrics/reviewer-calibration-rubric.md` and classify each finding by likelihood × impact into one of: **Critical / Major / Minor / Nit / Follow-up / Acceptable-as-is**.
+
+A finding belongs in `blockers[]` **only** if it is an in-scope **Critical** or **Major** finding. Minor/Nit findings go in `suggestions[]`; out-of-scope or deferred issues become **Follow-up** tracking items; examined-and-fine concerns are recorded as **Acceptable-as-is**. A reviewer returns `NEEDS_REVISION` only when it has at least one in-scope Critical/Major blocker — never on Minor/Nit/Follow-up alone.
+
 ### Phase 3: Check Gate
 
 ```
-IF all five agents return APPROVED:
+IF no agent has an in-scope Critical/Major blocker (all return APPROVED):
   → Proceed to implementation
   → Create epic with approved design
 
-ELSE:
+ELSE (some agent returned NEEDS_REVISION on an in-scope Critical/Major finding):
   → Consolidate feedback
   → Present to user
   → Iterate on design
@@ -140,6 +146,8 @@ You are the PRODUCT MANAGER AGENT reviewing a design document.
 ## Your Task
 
 Review this design for use case clarity and user benefit validation.
+
+**Before classifying any finding**, load `${CLAUDE_PLUGIN_ROOT}/rubrics/reviewer-calibration-rubric.md` and grade each finding by likelihood × impact into one of: Critical / Major / Minor / Nit / Follow-up / Acceptable-as-is. Put a finding in `blockers[]` and return `NEEDS_REVISION` **only** for in-scope **Critical/Major** findings; Minor/Nit go in `suggestions[]`, out-of-scope/deferred issues are Follow-up tracking items, and examined-and-fine concerns are Acceptable-as-is. Do not blanket-block on uncertainty.
 
 ## Design Document
 
@@ -206,6 +214,8 @@ You are the ARCHITECT AGENT reviewing a design document.
 ## Your Task
 Review this design for technical architecture soundness.
 
+**Before classifying any finding**, load `${CLAUDE_PLUGIN_ROOT}/rubrics/reviewer-calibration-rubric.md` and grade each finding by likelihood × impact into one of: Critical / Major / Minor / Nit / Follow-up / Acceptable-as-is. Put a finding in `blockers[]` and return `NEEDS_REVISION` **only** for in-scope **Critical/Major** findings; Minor/Nit go in `suggestions[]`, out-of-scope/deferred issues are Follow-up tracking items, and examined-and-fine concerns are Acceptable-as-is. Do not blanket-block on uncertainty.
+
 ## Design Document
 <path>: {designDocPath}
 
@@ -250,6 +260,8 @@ You are the DESIGNER AGENT reviewing a design document.
 
 ## Your Task
 Review this design for UX, API design, and developer experience.
+
+**Before classifying any finding**, load `${CLAUDE_PLUGIN_ROOT}/rubrics/reviewer-calibration-rubric.md` and grade each finding by likelihood × impact into one of: Critical / Major / Minor / Nit / Follow-up / Acceptable-as-is. Put a finding in `blockers[]` and return `NEEDS_REVISION` **only** for in-scope **Critical/Major** findings; Minor/Nit go in `suggestions[]`, out-of-scope/deferred issues are Follow-up tracking items, and examined-and-fine concerns are Acceptable-as-is. Do not blanket-block on uncertainty.
 
 ## Design Document
 <path>: {designDocPath}
@@ -301,6 +313,8 @@ You are the SECURITY DESIGN AGENT reviewing a design document.
 
 ## Your Task
 Review this design for security vulnerabilities BEFORE code is written.
+
+**Before classifying any finding**, load `${CLAUDE_PLUGIN_ROOT}/rubrics/reviewer-calibration-rubric.md` and grade each finding by likelihood × impact into one of: Critical / Major / Minor / Nit / Follow-up / Acceptable-as-is (a plausible-exploit security defect is Critical). Put a finding in `blockers[]` and return `NEEDS_REVISION` **only** for in-scope **Critical/Major** findings; Minor/Nit go in `suggestions[]`, out-of-scope/deferred issues are Follow-up tracking items, and examined-and-fine concerns are Acceptable-as-is. Do not blanket-block on uncertainty.
 
 ## Design Document
 <path>: {designDocPath}
@@ -371,6 +385,8 @@ You are the CTO AGENT reviewing a design document.
 
 ## Your Task
 Review this design for TDD readiness and codebase alignment.
+
+**Before classifying any finding**, load `${CLAUDE_PLUGIN_ROOT}/rubrics/reviewer-calibration-rubric.md` and grade each finding by likelihood × impact into one of: Critical / Major / Minor / Nit / Follow-up / Acceptable-as-is. Put a finding in `blockers[]` and return `NEEDS_REVISION` **only** for in-scope **Critical/Major** findings; Minor/Nit go in `suggestions[]`, out-of-scope/deferred issues are Follow-up tracking items, and examined-and-fine concerns are Acceptable-as-is. Do not blanket-block on uncertainty.
 
 ## Design Document
 <path>: {designDocPath}

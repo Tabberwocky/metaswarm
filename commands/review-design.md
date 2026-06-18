@@ -42,6 +42,12 @@ Run the design review gate on a design document to get feedback from Product Man
 | `--iteration N`       | Mark as iteration N of review cycle                          |
 | `--skip-agent <name>` | Skip specific agent (pm, architect, designer, security, cto) |
 
+## Severity Calibration
+
+Before any reviewer settles on a verdict, it loads `${CLAUDE_PLUGIN_ROOT}/rubrics/reviewer-calibration-rubric.md` and classifies each finding by likelihood × impact into one of: **Critical / Major / Minor / Nit / Follow-up / Acceptable-as-is**.
+
+Only an in-scope **Critical/Major** finding is a blocker that produces `NEEDS_REVISION`. Minor/Nit findings are non-blocking suggestions; out-of-scope or deferred issues become **Follow-up** tracking items; examined-and-fine concerns are recorded **Acceptable-as-is**. A design is not held back for Minor/Nit/Follow-up findings alone.
+
 ## Review Verdicts
 
 ### APPROVED

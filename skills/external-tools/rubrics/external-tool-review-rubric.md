@@ -26,6 +26,8 @@ this rubric. The reviewer must be adversarial: assume nothing works until proven
 | **BLOCKING** | Contract violation, missing requirement, broken functionality | Causes FAIL |
 | **WARNING** | Style issue, minor improvement, non-critical concern | Does NOT cause FAIL |
 
+**Calibrate before classifying.** Load `${CLAUDE_PLUGIN_ROOT}/rubrics/reviewer-calibration-rubric.md` and assign each finding a class (Critical / Major / Minor / Nit / Follow-up / Acceptable-as-is) via likelihood × impact. BLOCKING ↔ in-scope Critical/Major; WARNING ↔ Minor/Nit/Follow-up/Acceptable-as-is. Cross-model disagreement is preserved and reported, but only in-scope Critical/Major defects fail the review — speculative or stylistic divergence does not.
+
 ## Review Checklist
 
 The reviewer MUST check each of these against the spec:

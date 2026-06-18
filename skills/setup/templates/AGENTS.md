@@ -61,6 +61,10 @@ If a GitHub Issue specifies different coverage requirements, update `.coverage-t
 - **Plan Review Gate**: Adversarial review after any implementation plan is drafted. 3 independent reviewers (Feasibility, Completeness, Scope & Alignment) -- ALL must PASS before presenting the plan
 - **Coverage Gate**: Reads `.coverage-thresholds.json` and runs the enforcement command -- BLOCKING gate before PR creation
 
+### Reviewer Severity Calibration
+
+All automated review gates (design, plan, adversarial implementation, cross-model) load `${CLAUDE_PLUGIN_ROOT}/rubrics/reviewer-calibration-rubric.md` before classifying findings. Each finding is graded by likelihood x impact into one of **Critical / Major / Minor / Nit / Follow-up / Acceptable-as-is**. Only in-scope **Critical/Major** findings are blocking (FAIL / NEEDS_REVISION); Minor/Nit are non-blocking notes, Follow-up items are tracked, and Acceptable-as-is closes a concern out. Reviewers do not blanket-block on uncertainty -- when unsure, they default to the lower severity. Repo-local overlays may layer stricter rules on top of this baseline.
+
 ## Workflow Enforcement (MANDATORY)
 
 These rules override any conflicting instructions. They ensure the full metaswarm pipeline is followed.

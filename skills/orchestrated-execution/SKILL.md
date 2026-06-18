@@ -299,7 +299,8 @@ You are the ADVERSARIAL REVIEWER for work unit ${wuId}.
 Adversarial — your job is to FIND FAILURES, not to approve.
 
 ## Rubric
-Read and follow: ./rubrics/adversarial-review-rubric.md
+First load `${CLAUDE_PLUGIN_ROOT}/rubrics/reviewer-calibration-rubric.md` and classify every finding by likelihood × impact (Critical / Major / Minor / Nit / Follow-up / Acceptable-as-is). DoD/spec contract violations are blocking (Critical/Major → FAIL); speculative improvements become Minor, Follow-up, or Acceptable-as-is and do NOT fail the review.
+Then read and follow: ./rubrics/adversarial-review-rubric.md
 
 ## Spec
 ${spec}
