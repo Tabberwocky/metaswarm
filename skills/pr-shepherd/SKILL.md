@@ -261,6 +261,25 @@ These require user input BEFORE fixing:
 - Ambiguous errors
 - Anything you're uncertain about
 
+### Architectural / Load-Bearing Issues (Advisor Escalation)
+
+PR triage typically runs at Sonnet 4.6 + high — fine for ~90% of bot feedback (lint, JSDoc, naming, defensive copies, missing tests). The remaining ~10% — bot findings that propose changes to architectural patterns, scoring formulas, persistence invariants, or anything documented as load-bearing — Sonnet may push through without recognizing the stakes.
+
+**Before applying any bot finding that would change behavior covered by a checked-in `.claude/rules/*.md` file in the repo (or any pattern flagged as load-bearing in the repo's CLAUDE.md), invoke `advisor()` first.** Advisor is Opus and second-opinions the change; the call is ~30–60 seconds and cheap relative to a wrong fix that breaks an invariant.
+
+The trigger is mechanical, not judgment-based:
+
+1. Read the bot finding.
+2. Quick classification:
+   - **Execution-class** (lint, JSDoc, naming, defensive copy, file-line specifics) → fix without advisor.
+   - **Architectural / load-bearing** (touches code referenced by a `.claude/rules/*.md` file, changes scoring/calibration constants, modifies persistence invariants, alters lens-protected fields, etc.) → invoke advisor.
+   - **Ambiguous** → invoke advisor (default to escalate; the call is cheap).
+3. If advisor is invoked, surface the finding + advisor's recommendation in the PR triage comment. Don't apply silently.
+
+This applies even at Sonnet-high effort; the issue isn't reasoning depth, it's that bots surface architectural concerns as small inline comments that look execution-class to a model not deeply familiar with the codebase. The advisor gate converts "must recognize architectural stakes mid-flight" into "must check whether the touched file is referenced by a rule file" — a deterministic check.
+
+If repo has no `.claude/rules/`, fall back to: invoke advisor before applying any bot finding that proposes changes to established patterns, public APIs, security/persistence invariants, or anything CLAUDE.md flags as load-bearing.
+
 ### FIXING State Rules
 
 1. **Use TDD** - Invoke `superpowers:test-driven-development` for code changes
