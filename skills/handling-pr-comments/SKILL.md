@@ -57,6 +57,44 @@ For each actionable comment, further categorize as:
 5. **Intentional** - Decline with explanation
 6. **Out-of-Scope** - See Phase 2b
 
+### Phase 2a: Proportional Response Assessment
+
+**The original "fix everything, no exceptions" policy is wrong.** Treating every bot comment as equally mandatory wastes effort on false positives, theoretical edge cases, and style-only nits. Calibrate the response to actual risk using a likelihood × impact model (adapted from jb1's `be_practical/risk_and_mitigations.md`).
+
+**Always-fix carve-outs (skip the matrix, just fix):**
+
+- **Correctness** — the comment identifies a real bug, broken behavior, or incorrect logic.
+- **Security / privacy / data integrity / money / regulatory** — fix properly regardless of how rare the trigger seems.
+- **Human comments** — non-bot reviewer feedback is always addressed, never triaged away.
+
+For everything else (bot nitpicks, refactor suggestions, defensive-coding asks, style preferences), classify on two axes:
+
+- **Likelihood** the issue actually occurs: common, occasional, rare, or theoretical.
+- **Impact** if it does: serious, moderate, or minor.
+
+| Likelihood ↓ / Impact → | Serious | Moderate | Minor |
+| ----------------------- | ------- | -------- | ----- |
+| **Common / Occasional** | Fix thoroughly | Fix | Fix if quick, else push back |
+| **Rare** | Fix (simple, local) | Simple local fix or push back | Push back or note as acceptable |
+| **Theoretical** | Simple guard or note | Push back | Push back / acceptable as-is |
+
+**Push back requires evidence.** Disagreement with a bot is only credible when grounded in the code, not assertion. Before declining, cite at least one of:
+
+- A **code reference** showing the concern is already handled (the guard, the caller contract, the validation).
+- A **type constraint** that makes the flagged state unreachable.
+- An **existing test or mechanism** that already covers the case.
+
+If you can't point to one of those, treat the finding as valid and fix it.
+
+**Response templates** (full reply wording lives in Response Templates below — these are the triage shapes):
+
+- **False positive** — "This is a false positive: <code reference showing why>. No change needed."
+- **Dead-code guard** — "The flagged branch is unreachable because <type/caller constraint>. Declining to add a guard for a state that can't occur."
+- **DRY violation (low value)** — "Noted. The duplication is <N> lines across <M> sites with diverging intent; extracting now would couple them prematurely. Declining per proportional triage."
+- **Style preference** — "Style preference without a correctness or readability delta here; leaving as-is to keep the diff scoped."
+
+**Deferred valuable feedback** — if a pushed-back finding is genuinely valuable but out of scope for this PR, do not silently drop it: capture it per the deferred-feedback capture protocol (see Phase 2c / the repo's no-silent-drops Tracking-item protocol).
+
 ### Phase 2b: Extract "Outside Diff Range" Comments from Review Bodies (CRITICAL)
 
 **COMMONLY MISSED**: CodeRabbit posts "Outside diff range" comments in the **review body**, not as inline threads. These are actionable feedback that MUST be addressed.
@@ -229,7 +267,7 @@ fi
 ```text
 REPEAT:
   Phase 1: Discover comments
-  Phase 2: Triage
+  Phase 2: Triage (apply Phase 2a proportional assessment to each bot finding)
   Phase 3: Fix
   Phase 4: Respond
   Phase 5: Resolve threads

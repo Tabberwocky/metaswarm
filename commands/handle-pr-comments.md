@@ -19,7 +19,7 @@ This command helps systematically address PR review comments from automated tool
 **A PR is NOT complete until ALL of the following are true:**
 
 1. All CI checks pass
-2. **EVERY** code review comment has been addressed (including trivial/nitpicks)
+2. **EVERY** code review comment has been triaged per Proportional Response (likelihood × impact): correctness, security/privacy/data/money/regulatory, and human-authored comments are always addressed; trivial/nitpicks/out-of-scope are assessed proportionally — fixed, deferred (captured per the deferred-feedback protocol), or pushed back on with evidence
 3. **EVERY** comment thread has received an individual response
 4. All threads are marked as resolved (after reviewer approval)
 5. Any work > 1 day has a GitHub issue created
@@ -34,9 +34,30 @@ This command helps systematically address PR review comments from automated tool
 | Critical/Major         | Fix immediately            | Never                       |
 | High/Medium            | Fix before merge           | Never                       |
 | Minor                  | Fix                        | Never                       |
-| **Trivial/Nitpick**    | **FIX THESE TOO**          | These matter!               |
+| **Trivial/Nitpick**    | **Assess proportionally**  | See triage below            |
 | **Out-of-scope**       | **INVESTIGATE THOROUGHLY** | Often the BEST insights!    |
 | Human comments         | Always address             | Never                       |
+
+### Proportional Response Triage
+
+Bot feedback is not all equal. Calibrate the response to actual risk with a likelihood × impact model instead of blindly fixing every nitpick.
+
+**Always-fix carve-outs (skip the matrix):** correctness bugs, anything touching security / privacy / data integrity / money / regulatory, and all human-reviewer comments.
+
+For other bot findings (nitpicks, refactor suggestions, defensive-coding asks, style preferences), classify on two axes:
+
+- **Likelihood** the issue occurs: common, occasional, rare, theoretical.
+- **Impact** if it does: serious, moderate, minor.
+
+| Likelihood ↓ / Impact → | Serious | Moderate | Minor |
+| ----------------------- | ------- | -------- | ----- |
+| **Common / Occasional** | Fix thoroughly | Fix | Fix if quick, else push back |
+| **Rare** | Fix (simple, local) | Simple fix or push back | Push back or accept as-is |
+| **Theoretical** | Simple guard or note | Push back | Push back / accept as-is |
+
+**Push back requires evidence** — decline a bot finding only when you can cite a code reference, a type constraint, or an existing test/mechanism that already covers the case. Absent that, fix it.
+
+**Deferred valuable feedback** that is out of scope for this PR must not be silently dropped — capture it per the deferred-feedback capture protocol (see the handling-pr-comments skill's Phase 2c / the repo's no-silent-drops Tracking-item protocol).
 
 ### Work Sizing Decision
 
@@ -362,10 +383,10 @@ This script:
 | **CRITICAL** | `_Potential issue_ \| _Critical_`                   | Fix immediately  |
 | **HIGH**     | `_Potential issue_ \| _Major_`                      | Fix before merge |
 | **MEDIUM**   | `_Minor_` or `_Refactor suggestion_ \| _Major_`     | Fix              |
-| **LOW**      | `_Trivial_` / `_Nitpick_`                           | **Fix**          |
+| **LOW**      | `_Trivial_` / `_Nitpick_`                           | **Assess proportionally** |
 | **HUMAN**    | Non-bot comments                                    | Always process   |
 
-> **Note**: ALL comment types require fixes. See Complete PR Lifecycle Protocol - trivial/nitpicks are NOT optional.
+> **Note**: Every comment is triaged per Proportional Response (likelihood × impact). Correctness, security/privacy/data/money/regulatory, and human-authored comments are always addressed; trivial/nitpicks are assessed by risk — fixed, deferred (captured per the deferred-feedback protocol), or pushed back on with evidence. See Complete PR Lifecycle Protocol and Proportional Response Triage.
 
 ### 1c. Extract "Outside Diff Range" Comments from Review Bodies (CRITICAL)
 
@@ -508,7 +529,7 @@ Then re-check for new comments using the workflow in Section 1.
 
 ### 5. Best Practices
 
-1. **Be Thorough**: Address **ALL** comments - including trivial/nitpicks and out-of-scope
+1. **Be Proportional**: Use likelihood × impact triage (see Proportional Response Triage) — fix correctness, security, and human comments unconditionally; assess bot nitpicks and out-of-scope suggestions by risk rather than fixing everything blindly
 2. **Be Complete**: Address all parts of multi-part suggestions (don't cherry-pick)
 3. **Be Iterative**: Follow the Iteration Loop - don't declare complete until ALL threads resolved
 4. **Be Responsive**: Reply to **EVERY** comment thread individually (not batch responses)
@@ -523,7 +544,7 @@ Then re-check for new comments using the workflow in Section 1.
 A PR is **NOT ready for merge** until:
 
 1. All CI checks pass
-2. **EVERY** comment (including trivial/nitpicks/out-of-scope) has been addressed
+2. **EVERY** comment has been triaged per Proportional Response: correctness, security/privacy/data/money/regulatory, and human-authored comments addressed; trivial/nitpicks/out-of-scope assessed proportionally — fixed, deferred (captured per the deferred-feedback protocol), or pushed back on with evidence
 3. **EVERY** thread has an individual response
 4. All threads are marked resolved (after reviewer approval)
 5. GitHub issues created for any deferred work (> 1 day)
