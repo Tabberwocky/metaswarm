@@ -185,6 +185,16 @@ Three project-agnostic habits injected into adopters' CLAUDE.md at setup, delibe
 
 ---
 
+### K. pr-shepherd opens PRs + manual dual-bot (CodeRabbit + Copilot) policy
+**Change-set:** `0.12.0-fork.4`
+**Files:** `skills/pr-shepherd/SKILL.md` (new § "Bot reviews are manually triggered" + new "Phase 0: Open the PR"; per-round re-trigger wired into Phase 4; fixed the auto-review framing in Common Mistakes), `skills/handling-pr-comments/SKILL.md` (Phase 7 STEP 0 per-round re-trigger + reframed auto-review line + activation mentions), `commands/pr-shepherd.md` + `.claude/commands/pr-shepherd.md`, `commands/handle-pr-comments.md` + `.claude/commands/handle-pr-comments.md` (manually-kept identical pairs)
+
+pr-shepherd now **opens** a PR when invoked on a branch with no PR (Phase 0: shareability gate → push → duplicate guard → `gh pr create` → initial bot triggers → report), skipping cleanly when a PR already exists. It supersedes `issue-orchestrator`'s manual "Option B: `gh pr create` then invoke pr-shepherd" step. Adds the **manual dual-bot policy**: CodeRabbit + Copilot don't auto-review, so the skill triggers both explicitly — initial on open, re-trigger per meaningful fix round — **by default without asking** (opt out only in the invoking prompt; only the bots a repo actually uses; Cursor/Gemini still auto). Copilot's `gh` reviewer-request mechanic is documented as a tiered fallback (`gh pr edit --add-reviewer` → REST `requested_reviewers` → Reviewers UI; confirm on first live use). Includes the CodeRabbit-throttle → `@claude` fallback. Adapted from jb1's `pr-web`/`pr-shepherd` (commit `6a498c9d`), MCP→`gh` idiom. The global behavior policy lives in the user-level `~/.claude/CLAUDE.md` § "PR bot invocation"; this is the metaswarm-fork half.
+
+**Upstreamable: partial** — the manual dual-bot policy + Phase-0 PR-creation are generic; the `@claude`-throttle-fallback wording and the assumption that auto-review is owner-disabled are environment-specific.
+
+---
+
 ## Upstream Sync Procedure
 
 When a new upstream tag is available:

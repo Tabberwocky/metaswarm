@@ -25,6 +25,7 @@ All monitoring, fixing, and review handling logic is identical in both modes. Se
 Activate this skill when ANY of these conditions are true:
 
 - Agent just created a PR with `gh pr create`
+- **Invoked on a branch with no PR yet** → pr-shepherd opens it (Phase 0) and then monitors
 - User asks to "shepherd", "monitor", or "see through" a PR
 - User invokes `/pr-shepherd <pr-number>`
 - User asks to "watch this PR" or "handle this PR until it's merged"
@@ -93,6 +94,61 @@ MONITORING → FIXING → MONITORING → WAITING_FOR_USER → FIXING → MONITOR
 | `WAITING_FOR_USER` | Present options, wait for user decision     | User responds                                  |
 | `DONE`             | All CI green + all threads resolved         | Exit successfully                              |
 
+## Bot reviews are manually triggered — invoke CodeRabbit + Copilot
+
+**Default when this skill OPENS a PR (Phase 0) or completes a meaningful fix round: invoke BOTH bots — do NOT ask.** The user opts out only by saying so in the prompt that invoked the skill (e.g. "open it but skip the bots" / "just CodeRabbit"). This is *not* "fire on every touch": attaching to an already-open PR to monitor does **not** re-fire the initial review (Phase 0 is skipped when a PR already exists), and per-round triggers fire only after a fix round's commits are pushed. CodeRabbit and Copilot do **not** auto-review on open or on push — review happens only when explicitly requested. Cursor and Gemini still auto-review on push.
+
+> **Assumes auto-review is disabled owner-side** (CodeRabbit dashboard `auto_review` off + Copilot account auto-review off). If it isn't, explicit triggering double-reviews and burns metered review budget — that double-spend is the failure this policy prevents.
+
+> **Repo guard:** only trigger the bots actually configured on this repo. If a repo doesn't use CodeRabbit (no `.coderabbit.yaml` / app not installed) or Copilot review isn't enabled, skip that bot silently — never post `@coderabbitai` or request Copilot where they aren't set up.
+
+| When | CodeRabbit | Copilot |
+|---|---|---|
+| **Initial** (Phase 0, PR open) | `gh pr comment <N> --body "@coderabbitai full review"` (full = complete pass; plain `review` is a no-op on a never-reviewed PR) | request the `copilot-pull-request-reviewer[bot]` reviewer (mechanic below; no `@copilot` comment exists) |
+| **Per meaningful round** (after fixes pushed) | `gh pr comment <N> --body "@coderabbitai review"` (incremental; `full review` only after a history-rewriting rebase) | re-request the Copilot reviewer on the new SHA |
+
+One trigger per meaningful round, not per commit; skip CI-only / label / no-diff rounds.
+
+**Copilot request mechanic (confirm on first live use — `gh`'s reviewer flags reject some special values):**
+1. Try `gh pr edit <N> --add-reviewer "copilot-pull-request-reviewer[bot]"`.
+2. If that rejects the bot login: `gh api -X POST "repos/$OWNER/$REPO/pulls/<N>/requested_reviewers" -f "reviewers[]=copilot-pull-request-reviewer[bot]"`.
+3. If both fail: request Copilot via the GitHub Reviewers UI (or a GitHub-MCP Copilot-review tool where available), and note it for the user.
+
+**CodeRabbit throttle → `@claude` fallback:** if CodeRabbit returns a rate-limit notice instead of a review, notify the user and ask once per throttle episode whether to tag `@claude` as the fallback reviewer (never autonomously). On yes, keep `@claude` consulted for the rest of the PR (re-mention on meaningful updates, not per commit) and skip CodeRabbit's trigger while it's engaged. On no, note it (no silent drop) and either wait out the window or proceed without CodeRabbit.
+
+## Phase 0: Open the PR (skip if a PR already exists)
+
+Run this only when the skill is invoked on a branch with **no PR yet**. **Skip** when a PR number/URL was provided or a PR already exists for the branch — jump to Phase 1. Phase 0 is autonomous: invoking pr-shepherd on a branch is your authorization to open; the only pause is an uncommitted working tree.
+
+```bash
+# 1. Branch shareability gate
+BASE_BRANCH="$(git symbolic-ref --short refs/remotes/origin/HEAD | sed 's#^origin/##')"
+# Fail closed on a dirty tree: a partial (committed-only) push would open a PR on an incomplete diff.
+test -z "$(git status --porcelain)" || { git status --short; echo "Working tree is dirty — commit, stash, or confirm scope before opening a PR (never auto-commit). Surface to the user and stop."; exit 1; }
+BRANCH="$(git rev-parse --abbrev-ref HEAD)"
+[ "$BRANCH" = "$BASE_BRANCH" ] && { echo "Refusing to PR from the default branch."; exit 1; }
+[ "$(git rev-list --count "origin/${BASE_BRANCH}..HEAD")" -eq 0 ] && { echo "Nothing to PR."; exit 1; }
+
+# 2. Push the branch (retry 2/4/8/16s on network errors; never --force unless asked) — MUST succeed before creating the PR
+git push -u origin "$BRANCH"
+
+# 3. Duplicate guard — reuse an existing open PR instead of creating a second
+PR_NUMBER=$(gh pr list --head "$BRANCH" --state open --json number -q '.[0].number')
+```
+
+If no existing PR (`PR_NUMBER` empty):
+
+4. **Compose** title (<70 chars, repo convention) + body from all branch commits + the cumulative diff. Body: `## Summary` (what + why) and `## Test plan` (validated vs pending checks). Add a `## Conflict Resolutions` section only if a non-trivial rebase happened (per the general-discipline merge-conflict rule).
+5. **Create** (ready, not draft, unless the user explicitly asked for a GitHub draft) — open immediately, no draft-for-review pause:
+   ```bash
+   gh pr create --base "$BASE_BRANCH" --head "$BRANCH" --title "<title>" --body "<body>"
+   PR_NUMBER=$(gh pr view "$BRANCH" --json number -q .number)
+   ```
+6. **Trigger the initial bot reviews** — default, do NOT ask (see § "Bot reviews are manually triggered"): `@coderabbitai full review` **and** request the Copilot reviewer, for whichever of the two this repo uses.
+7. **Report** PR number/URL/base, then fall into Phase 1.
+
+This supersedes the manual "Option B: `gh pr create` then invoke pr-shepherd" step in `issue-orchestrator` — pr-shepherd now owns opening when invoked on a bare branch.
+
 ## Phase 1: Initialize
 
 ```bash
@@ -101,9 +157,9 @@ PR_NUMBER=$(gh pr view --json number -q .number 2>/dev/null)
 OWNER=$(gh repo view --json owner -q .owner.login)
 REPO=$(gh repo view --json name -q .name)
 
-# If no PR on current branch, check if number was provided
+# If no PR on current branch and none was provided, run Phase 0 to open one (don't just exit)
 if [ -z "$PR_NUMBER" ]; then
-  echo "No PR found for current branch. Provide PR number."
+  echo "No PR for current branch — run Phase 0 (Open the PR), or provide a PR number."
   exit 1
 fi
 
@@ -304,7 +360,7 @@ git add -A && git commit -m "fix: <description>" && git push
 When new review comments are detected:
 
 1. Invoke the `handling-pr-comments` skill
-2. That skill handles categorization, fixes, responses, and thread resolution
+2. That skill handles categorization, fixes, responses, and thread resolution — including the **per-round re-trigger of CodeRabbit + Copilot** after the round's fixes are pushed (see § "Bot reviews are manually triggered"; they do not auto-re-review)
 3. **CRITICAL: The handling-pr-comments skill includes an iteration loop**
 4. **ALL threads must be resolved** before returning to MONITORING
 5. If a thread cannot be resolved (needs clarification from reviewer), query the comment author asking for follow-up
@@ -623,8 +679,8 @@ After all post-merge tasks complete:
 ### #1 MISTAKE: Returning to MONITORING without checking for NEW comments
 
 - After pushing a fix and responding to threads, you MUST run Phase 7
-- Automated reviewers (CodeRabbit, Cursor) analyze every commit
-- NEW comments often appear within 1-2 minutes of your push
+- Cursor (and Gemini, where enabled) auto-review every push; **CodeRabbit + Copilot only re-review when you re-trigger them per round** (§ "Bot reviews are manually triggered") — so the new comments you're checking for arrive only after that trigger
+- NEW comments often appear within 1-2 minutes of your push (or your re-trigger)
 - If you skip Phase 7, you'll miss the new comments and declare complete prematurely
 
 **Pushing without local validation**

@@ -78,12 +78,13 @@ REPEAT until (all_threads_resolved AND no_new_comments AND no_new_reviews_after_
   3. For each comment: fix OR create issue OR respond with disagreement
   4. Run validation: lint, typecheck, and tests
   5. Commit and push
+  5b. Re-trigger CodeRabbit + Copilot for this round (they don't auto-re-review): `@coderabbitai review` + re-request the Copilot reviewer — only the bots configured on the repo; once per meaningful round. See pr-shepherd § "Bot reviews are manually triggered."
   6. Respond to EVERY thread individually
   6b. For "Outside diff range" comments: leave a general PR comment acknowledging
   7. CRITICAL: WAIT FOR CI/CD, then RE-CHECK for NEW comments/reviews
      - Monitor the CI/CD pipeline via the `Monitor` tool — see the pr-shepherd skill for the canonical script. Monitor fires events only on state change (0 tokens during quiet periods).
      - Wait until ALL checks complete (not just pass - complete)
-     - Automated reviewers (CodeRabbit) post comments during/after their check
+     - Cursor/Gemini auto-review on push; CodeRabbit + Copilot post their comments only after the step-5b re-trigger
      - Check BOTH inline threads AND review bodies for new feedback
      - Check for NEW REVIEWS with "Actionable comments posted: X" (X > 0)
   8. If new comments OR new reviews exist -> GO TO STEP 1

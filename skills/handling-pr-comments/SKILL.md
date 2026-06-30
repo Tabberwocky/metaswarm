@@ -5,14 +5,14 @@ description: Address PR review feedback systematically — fetch inline comments
 
 # handling-pr-comments
 
-Use when addressing PR review feedback, after receiving review comments from CodeRabbit, Cursor, or human reviewers - ensures systematic responses to each comment thread with proper attribution and thread resolution.
+Use when addressing PR review feedback, after receiving review comments from CodeRabbit, Copilot, Cursor, or human reviewers - ensures systematic responses to each comment thread with proper attribution and thread resolution.
 
 ## When to Activate
 
 Activate this skill when ANY of these conditions are true:
 
 - User asks to "address PR comments" or "handle review feedback"
-- User mentions CodeRabbit, Cursor bot, or reviewer comments
+- User mentions CodeRabbit, Copilot, Cursor bot, or reviewer comments
 - User is working on fixes requested in a PR review
 - User asks to "check PR comments" or "respond to reviewers"
 - After making fixes to address review feedback
@@ -231,9 +231,15 @@ gh api graphql -f query='mutation {
 
 **THE #1 WORKFLOW FAILURE: Stopping after Phase 5-6 without checking for NEW comments.**
 
-Automated reviewers (CodeRabbit, Cursor) analyze EVERY commit you push. They post NEW comments during/after their check runs.
+Cursor (and Gemini, where enabled) auto-review EVERY commit you push and post NEW comments during/after their check. **CodeRabbit + Copilot do NOT auto-re-review** — they only re-review when you re-trigger them per round (see the pr-shepherd skill § "Bot reviews are manually triggered"). So after a fix round's commits are pushed, re-trigger both *before* watching for the resulting comments — otherwise their reviews silently go stale.
 
 ```bash
+# STEP 0: Re-trigger the per-round bot reviews (once per meaningful round; skip CI-only / label / no-diff rounds).
+#   Only the bots actually configured on this repo; assumes auto-review is disabled owner-side.
+#   CodeRabbit:  gh pr comment "$PR_NUMBER" --body "@coderabbitai review"   # incremental (full review only after a history-rewriting rebase)
+#   Copilot:     re-request the copilot-pull-request-reviewer[bot] reviewer on the new SHA
+#                (exact gh mechanic in pr-shepherd § "Bot reviews are manually triggered")
+
 # STEP 1: Watch for ALL CI/CD checks to complete via the Monitor tool
 PR_NUMBER=<number>
 # Use the Monitor tool to watch for state changes (see the pr-shepherd skill for the canonical script).
