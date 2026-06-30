@@ -1,6 +1,6 @@
 {
   "name": "metaswarm",
-  "version": "0.12.0-fork.2",
+  "version": "0.12.0-fork.3",
   "description": "Multi-agent orchestration framework for Claude Code, Gemini CLI, and Codex CLI — 19 agents, 14 skills, quality gates, and TDD enforcement",
   "author": {
     "name": "David Sifry",

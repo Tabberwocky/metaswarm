@@ -8,7 +8,7 @@ This is a fork of `dsifry/metaswarm` — hosted at `Tabberwocky/metaswarm` (orig
 `claude plugin update` silently overwrites the plugin cache, making hand-applied cache edits ephemeral. The fork turns every customization into a durable git commit on `custom` that survives any number of plugin updates.
 
 **Marketplace wiring:**
-The fork is served via a local-directory marketplace named `metaswarm-fork-marketplace`, registered in `~/.claude/plugins/known_marketplaces.json` with `source.source = "directory"` and `source.path = "~/Coding/metaswarm-fork"`. This mirrors the beads plugin precedent (which uses `~/Coding/beads-plugin-source` the same way).
+The fork is served via a local-directory marketplace named `metaswarm-fork-marketplace`, registered in `~/.claude/plugins/known_marketplaces.json` with `source.source = "directory"` and `source.path = "~/Coding/metaswarm-fork"`. Codex uses the same local fork as its source: `.agents/plugins/marketplace.json` points the `metaswarm` plugin at `{"source":"local","path":"."}`, and `~/.codex/metaswarm-bridge/sync.sh` materializes active Codex skills from `~/Coding/metaswarm-fork`. This mirrors the beads plugin precedent (which uses `~/Coding/beads-plugin-source` the same way).
 
 ---
 
@@ -40,7 +40,8 @@ The fork is served via a local-directory marketplace named `metaswarm-fork-marke
 4. `node lib/sync-resources.js --check` (must pass before tagging)
 5. `claude plugin marketplace update metaswarm-fork-marketplace`
 6. `claude plugin update metaswarm@metaswarm-fork-marketplace`
-7. Restart Claude Code
+7. `~/.codex/metaswarm-bridge/sync.sh`
+8. Restart Claude Code and restart Codex
 
 ---
 
@@ -161,6 +162,26 @@ Empirical basis: jb1-un0e — plan-review-gate PASSED 3/3 Opus reviewers on the 
 Also replaced the "Dependency Graph Checklist" checkbox block in orchestrated-execution (self-certification) with a `/decompose` invocation requirement — checkbox self-certification is the exact pattern that let the jb1-un0e circular dependency slip past plan-review-gate.
 
 **Upstreamable: no** — references the `decompose` plugin (external dependency) and jb1-specific empirical evidence that isn't portable.
+
+---
+
+### I. Setup-Generated Rubric Mechanical Floor
+**Change-set:** `0.12.0-fork.3`
+**Files:** `scripts/list-applicable-rubrics.mjs` (new), `templates/rubrics-readme.md` (new, § Mechanical Floor), `skills/setup/SKILL.md` (Phase 3 now writes both into the target project + completion summary)
+
+`/setup` now lays down a rubric **mechanical floor**: a zero-dependency Node lister that globs every `.claude/rubrics/*.md` `applies-to` pattern against the diff and prints the `auto` rubrics that match. Reviewer selection of "which rubrics apply" is judgment-based, so a right-sized (or skipped) review can silently drop an auto-fire rubric that should have run; the lister rebinds the floor to the diff so it's evaluable regardless of review sizing. Informational (always exits 0). Setup writes the convention doc to `.claude/rubrics/README.md` and the lister to `scripts/` — the floor is inert (prints "Floor clear") until domain rubrics are authored. Mirrors the same mechanism added to the user-level `adapt-metaswarm` skill, which authors the domain rubrics on top.
+
+**Upstreamable: yes** — generic mechanism (pure glob-vs-diff), no environment-specific assumptions. Non-Node repos port the ~100 lines to their language.
+
+---
+
+### J. General Engineering Discipline Rules
+**Change-set:** `0.12.0-fork.3`
+**Files:** `templates/CLAUDE.md` (§ General Engineering Discipline, top-level — non-mandatory), `templates/CLAUDE-append.md` (§ General Engineering Discipline, non-mandatory sibling)
+
+Three project-agnostic habits injected into adopters' CLAUDE.md at setup, deliberately scoped as guidance (NOT under "Workflow Enforcement (MANDATORY)"): **doc-vs-code alignment** (parallel second-opinion auditor + doc-against-self grep before push; verify copied/transcribed claims against live source), **merge-conflict intent** (resolve by stated intent not line overlap; record non-trivial resolutions in a PR `## Conflict Resolutions` section), and **generated/regen artifacts** (identify by producer script, overwrite-then-regenerate during merges, never hand-merge). Distilled to portable form from jb1's `.claude/rules/*` (jb1-domain specifics stripped).
+
+**Upstreamable: yes** — generic discipline; no environment-specific dependencies.
 
 ---
 

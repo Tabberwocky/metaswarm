@@ -173,6 +173,14 @@ Approved plans, project context, and execution state are persisted to `.beads/` 
 
 **Note:** The standalone beads plugin (v0.63.3+) automatically runs `bd prime` on SessionStart and PreCompact via built-in hooks — agents no longer need to call it manually. If context is lost mid-execution, the beads plugin will re-prime automatically on the next session or compaction event. For explicit recovery, run `bd prime --work-type recovery` to reload the approved plan, completed work, and current position from disk.
 
+## General Engineering Discipline
+
+Project-agnostic habits that prevent silent information loss. They apply to all work, not only metaswarm-orchestrated tasks.
+
+- **Doc-vs-code alignment** — single-pass audits of docs that make verifiable claims about code (READMEs citing runtime values, onboarding/spec docs, skills or rules naming tools and API params) routinely miss cross-section drift and compound staleness. When you edit such a doc: (1) after your editing pass and before push, dispatch a parallel second-opinion auditor briefed to *verify against source by reading it*, not by reasoning, returning findings as BLOCKING / MINOR / CLEAR with `file:line` citations; (2) for every identifier you touched, grep the whole edited doc and confirm all occurrences agree. Language copied from another doc — or transcribed from a memory/context artifact — is unverified: grep live source before trusting it (age is not evidence of correctness).
+- **Merge-conflict intent** — two diffs on the same line rarely *exclude* each other; most conflicts are orthogonal intents to synthesize. Before resolving any non-trivial conflict, state in plain English what each side intends (read commit messages + surrounding code, not just the line diff), then synthesize if orthogonal or decide consciously if incompatible. Picking a side is a decision, not a default — record both intents and the rationale in the PR body under a `## Conflict Resolutions` section. Any PR whose rebase involved a non-trivial conflict (including mid-review re-rebases) carries that section.
+- **Generated / regen artifacts** — a file is a regen artifact only if a build script generates it deterministically from source (check the build scripts; don't guess from contents or naming). During any merge / rebase / stash transition, take the destination version without hand-merging, then re-run the generator — overwriting is safe *because* you immediately regenerate. A generator failure on the merged state is a signal about the source, not the artifact. Never overwrite authored content just because it *looks* generated.
+
 ## External Tools (Optional)
 
 If external AI tools are configured (`.metaswarm/external-tools.yaml`), the orchestrator

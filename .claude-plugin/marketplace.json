@@ -9,7 +9,7 @@
       "name": "metaswarm",
       "source": ".",
       "description": "Multi-agent orchestration framework for Claude Code — Tabberwocky fork with local customizations",
-      "version": "0.12.0-fork.2"
+      "version": "0.12.0-fork.3"
     }
   ]
 }

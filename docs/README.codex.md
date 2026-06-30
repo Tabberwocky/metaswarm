@@ -22,7 +22,7 @@ codex
 
 Then open `/plugins`, select `metaswarm`, and install metaswarm.
 
-The repo-local marketplace points at the public metaswarm repository root. For testing an unmerged branch, use a temporary marketplace whose plugin source URL is a `file://` URL or a pushed branch ref.
+The repo-local marketplace points at this local fork checkout, so Codex installs use the customized fork rather than upstream. After changing shared reviewer guidance, refresh active Codex skills with `~/.codex/metaswarm-bridge/sync.sh`.
 
 ## Invoke Skills
 

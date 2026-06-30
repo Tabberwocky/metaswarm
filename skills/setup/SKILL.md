@@ -281,6 +281,7 @@ Write them to `bin/` in the project. Make executable with `chmod +x`. Skip any t
 
 Read each file from `./scripts/`:
 - `beads-fetch-pr-comments.ts`, `beads-fetch-conversation-history.ts`
+- `list-applicable-rubrics.mjs` — mechanical rubric floor (plain Node, no `tsx`; runs even in non-TS repos)
 
 Write them to `scripts/` in the project. Skip any that already exist.
 
@@ -298,6 +299,7 @@ Write them to `scripts/` in the project. Skip any that already exist.
 | User chose YES for external tools | `./templates/external-tools.yaml` | `.metaswarm/external-tools.yaml` |
 | Always | `./templates/.env.example` | `.env.example` |
 | Always | `./templates/SERVICE-INVENTORY.md` | `SERVICE-INVENTORY.md` |
+| Always | `./templates/rubrics-readme.md` | `.claude/rubrics/README.md` (lays down the rubric convention + mechanical floor; rubrics are authored later) |
 | Always | `./templates/gitignore` | Merge into existing `.gitignore` (append missing entries, never duplicate) |
 
 For `.gitignore`, read the existing file (if any), then append language-specific entries that are not already present. Always ensure `.env`, `.DS_Store`, and `*.log` are included.
@@ -408,6 +410,7 @@ Mandatory files:
   ✔ {instruction file} — {written new / appended metaswarm section / already had it}
   ✔ .coverage-thresholds.json — {threshold}% coverage, enforcement: `{command}`
   ✔ .claude/commands/   — Claude only: shims for start-task, prime, review-design, self-reflect, pr-shepherd, brainstorm
+  ✔ .claude/rubrics/README.md + scripts/list-applicable-rubrics.mjs — rubric convention + mechanical floor (add rubrics to activate it)
 
 Other files written:
   {list every other file written or modified with its path}

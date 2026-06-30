@@ -1,15 +1,14 @@
 {
-  "name": "metaswarm",
+  "name": "metaswarm-fork-marketplace",
   "interface": {
-    "displayName": "metaswarm"
+    "displayName": "metaswarm fork"
   },
   "plugins": [
     {
       "name": "metaswarm",
       "source": {
-        "source": "url",
-        "url": "https://github.com/dsifry/metaswarm.git",
-        "ref": "main"
+        "source": "local",
+        "path": "."
       },
       "policy": {
         "installation": "AVAILABLE",
