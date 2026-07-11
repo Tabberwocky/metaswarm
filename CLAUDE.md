@@ -1,6 +1,30 @@
 # Project Instructions
 
-This project uses [metaswarm](https://github.com/dsifry/metaswarm), a multi-agent orchestration framework for Claude Code. It provides 18 specialized agents, a 9-phase development workflow, and quality gates that enforce TDD, coverage thresholds, and spec-driven development.
+> **⚠️ This repo IS the metaswarm plugin source — a personal fork, not an app that uses metaswarm.**
+> You are here to **develop the plugin**, not to build features with it. **Read
+> [`FORK-CONTEXT.md`](FORK-CONTEXT.md) and [`CUSTOMIZATIONS.md`](CUSTOMIZATIONS.md) first.**
+>
+> Consequences for working here:
+> - Customizations are **git commits on branch `custom`**; changes to *served* plugin content
+>   (`skills/`, `commands/`, `rubrics/`, `agents/`, `templates/`, …) require the **`0.12.0-fork.N`
+>   version bump + `sync-resources` + refresh** sequence (see CUSTOMIZATIONS.md § Version & Refresh).
+> - **Verification for this repo** is `node lib/sync-resources.js --check`, the `/status`
+>   diagnostic, and the local plugin-testing steps in `CONTRIBUTING.md` — **not** `npm test`
+>   (there is no test script) and **not** the TDD/100%-coverage gate below.
+> - **Everything below the "Adopter-facing reference" divider is exactly that** — it documents
+>   the workflow this plugin *provides to projects that adopt it* (the mandatory gates, TDD,
+>   coverage, `/start-task`, etc. all target *adopter* repos). It is retained so you know what
+>   you're maintaining; it is **not** the rule set for editing the plugin itself.
+
+This plugin is [metaswarm](https://github.com/dsifry/metaswarm), a multi-agent orchestration framework for Claude Code. It provides 18 specialized agents, a 9-phase development workflow, and quality gates that enforce TDD, coverage thresholds, and spec-driven development **in the projects that install it**.
+
+---
+
+# Adopter-facing reference
+
+*The sections below describe how an **adopter project** uses metaswarm. They are reference for
+what this plugin provides — not the workflow for editing the plugin source. See the banner above
+and [`FORK-CONTEXT.md`](FORK-CONTEXT.md) for how to actually work in this repo.*
 
 ## How to Work in This Project
 
