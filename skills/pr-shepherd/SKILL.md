@@ -94,20 +94,20 @@ MONITORING → FIXING → MONITORING → WAITING_FOR_USER → FIXING → MONITOR
 | `WAITING_FOR_USER` | Present options, wait for user decision     | User responds                                  |
 | `DONE`             | All CI green + all threads resolved         | Exit successfully                              |
 
-## Bot reviews are manually triggered — invoke CodeRabbit + Copilot
+## Bot reviews are manually triggered — invoke CodeRabbit + Cursor Bugbot + Copilot
 
-**Default when this skill OPENS a PR (Phase 0) or completes a meaningful fix round: invoke BOTH bots — do NOT ask.** The user opts out only by saying so in the prompt that invoked the skill (e.g. "open it but skip the bots" / "just CodeRabbit"). This is *not* "fire on every touch": attaching to an already-open PR to monitor does **not** re-fire the initial review (Phase 0 is skipped when a PR already exists), and per-round triggers fire only after a fix round's commits are pushed. CodeRabbit and Copilot do **not** auto-review on open or on push — review happens only when explicitly requested. Cursor and Gemini still auto-review on push.
+**Default when this skill OPENS a PR (Phase 0) or completes a meaningful fix round: invoke the configured review bots — do NOT ask.** The user opts out only by saying so in the prompt that invoked the skill (e.g. "open it but skip the bots" / "just CodeRabbit"). This is *not* "fire on every touch": attaching to an already-open PR to monitor does **not** re-fire the initial review (Phase 0 is skipped when a PR already exists), and per-round triggers fire only after a fix round's commits are pushed. **No bot auto-reviews** — CodeRabbit and Cursor Bugbot are comment-triggered, Copilot is a requested reviewer; review happens only when explicitly requested. **Gemini's consumer code-review product was retired 2026-07-17 and no longer reviews — never await it** (and even while it lived it auto-reviewed on *open*, not push).
 
 > **Assumes auto-review is disabled owner-side** (CodeRabbit dashboard `auto_review` off + Copilot account auto-review off). If it isn't, explicit triggering double-reviews and burns metered review budget — that double-spend is the failure this policy prevents.
 
 > **Repo guard:** only trigger the bots actually configured on this repo. If a repo doesn't use CodeRabbit (no `.coderabbit.yaml` / app not installed) or Copilot review isn't enabled, skip that bot silently — never post `@coderabbitai` or request Copilot where they aren't set up.
 
-| When | CodeRabbit | Copilot |
-|---|---|---|
-| **Initial** (Phase 0, PR open) | `gh pr comment <N> --body "@coderabbitai full review"` (full = complete pass; plain `review` is a no-op on a never-reviewed PR) | request the `copilot-pull-request-reviewer[bot]` reviewer (mechanic below; no `@copilot` comment exists) |
-| **Per meaningful round** (after fixes pushed) | `gh pr comment <N> --body "@coderabbitai review"` (incremental; `full review` only after a history-rewriting rebase) | re-request the Copilot reviewer on the new SHA |
+| When | CodeRabbit | Cursor Bugbot | Copilot |
+|---|---|---|---|
+| **Initial** (Phase 0, PR open) | `gh pr comment <N> --body "@coderabbitai full review"` (full = complete pass; plain `review` is a no-op on a never-reviewed PR) | a **standalone top-level** comment `bugbot run` (or `@cursor review`) — it MUST be its own top-level comment: a reply, or a comment that also carries another trigger, silently fails to fire | request the `copilot-pull-request-reviewer[bot]` reviewer (mechanic below; no `@copilot` comment exists) |
+| **Per meaningful round** (after fixes pushed) | `gh pr comment <N> --body "@coderabbitai review"` (incremental; use `full review` to recover a throttled / no-op round, or after a history-rewriting rebase) | re-post the standalone `bugbot run` comment on the new SHA | — (requested once at open; **no per-round re-request**). Copilot's review queue is quota-blocked through 2026-08-01, so a no-op response is expected — don't chase it |
 
-One trigger per meaningful round, not per commit; skip CI-only / label / no-diff rounds.
+One trigger per meaningful round, not per commit; skip CI-only / label / no-diff rounds. **Post each bot's trigger as its own separate top-level comment** — never combine two triggers in one comment (a combined comment can leave Cursor Bugbot un-fired while the other bot runs, so you declare convergence with zero Bugbot review).
 
 **Copilot request mechanic (confirm on first live use — `gh`'s reviewer flags reject some special values):**
 1. Try `gh pr edit <N> --add-reviewer "copilot-pull-request-reviewer[bot]"`.
@@ -115,6 +115,13 @@ One trigger per meaningful round, not per commit; skip CI-only / label / no-diff
 3. If both fail: request Copilot via the GitHub Reviewers UI (or a GitHub-MCP Copilot-review tool where available), and note it for the user.
 
 **CodeRabbit throttle → `@claude` fallback:** if CodeRabbit returns a rate-limit notice instead of a review, notify the user and ask once per throttle episode whether to tag `@claude` as the fallback reviewer (never autonomously). On yes, keep `@claude` consulted for the rest of the PR (re-mention on meaningful updates, not per commit) and skip CodeRabbit's trigger while it's engaged. On no, note it (no silent drop) and either wait out the window or proceed without CodeRabbit.
+
+> **A trigger returning success is not a review — the outcome artifact is. Verify CodeRabbit coverage correctly, or you will misread it and re-trigger into the throttle above.** A *clean* CodeRabbit pass posts **no review object at all**: it records coverage by editing its pinned walkthrough comment (the auto-generated `summarize by coderabbit.ai` comment), whose `between <base> and <head>` range is the signal. And ~half of CodeRabbit's "review objects" are **empty reply containers, not reviews** — filter on non-empty `.body`:
+> ```bash
+> gh api "repos/$OWNER/$REPO/pulls/<N>/reviews?per_page=100" \
+>   | jq -r 'sort_by(.submitted_at)[] | select((.body // "") != "") | "\(.user.login)\t\(.commit_id[0:7])\t\(.submitted_at)"'
+> ```
+> So a **missing** non-empty review object means **UNKNOWN → read the walkthrough range before concluding anything**; it is **not** `did-not-review` and is **never** grounds to re-trigger. A false re-trigger draws down the shared fair-usage meter and can starve a *later* PR to zero coverage. (`✅ Action performed / Review finished` / `Full review finished` replies are *trigger acknowledgements*, not reviews — a throttled or already-reviewed-SHA trigger returns one with no artifact.)
 
 ## Phase 0: Open the PR (skip if a PR already exists)
 
@@ -360,7 +367,7 @@ git add -A && git commit -m "fix: <description>" && git push
 When new review comments are detected:
 
 1. Invoke the `handling-pr-comments` skill
-2. That skill handles categorization, fixes, responses, and thread resolution — including the **per-round re-trigger of CodeRabbit + Copilot** after the round's fixes are pushed (see § "Bot reviews are manually triggered"; they do not auto-re-review)
+2. That skill handles categorization, fixes, responses, and thread resolution — including the **per-round re-trigger of CodeRabbit + Cursor Bugbot** after the round's fixes are pushed (see § "Bot reviews are manually triggered"; they do not auto-re-review — Copilot is requested once at open, not per round)
 3. **CRITICAL: The handling-pr-comments skill includes an iteration loop**
 4. **ALL threads must be resolved** before returning to MONITORING
 5. If a thread cannot be resolved (needs clarification from reviewer), query the comment author asking for follow-up
@@ -679,7 +686,7 @@ After all post-merge tasks complete:
 ### #1 MISTAKE: Returning to MONITORING without checking for NEW comments
 
 - After pushing a fix and responding to threads, you MUST run Phase 7
-- Cursor (and Gemini, where enabled) auto-review every push; **CodeRabbit + Copilot only re-review when you re-trigger them per round** (§ "Bot reviews are manually triggered") — so the new comments you're checking for arrive only after that trigger
+- No bot auto-reviews; **CodeRabbit + Cursor Bugbot only re-review when you re-trigger them per round** (§ "Bot reviews are manually triggered") — so the new comments you're checking for arrive only after that trigger. (Gemini was retired 2026-07-17 and posts nothing; Copilot is requested once at open, not per round.)
 - NEW comments often appear within 1-2 minutes of your push (or your re-trigger)
 - If you skip Phase 7, you'll miss the new comments and declare complete prematurely
 

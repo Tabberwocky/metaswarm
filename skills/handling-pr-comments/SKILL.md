@@ -231,13 +231,14 @@ gh api graphql -f query='mutation {
 
 **THE #1 WORKFLOW FAILURE: Stopping after Phase 5-6 without checking for NEW comments.**
 
-Cursor (and Gemini, where enabled) auto-review EVERY commit you push and post NEW comments during/after their check. **CodeRabbit + Copilot do NOT auto-re-review** — they only re-review when you re-trigger them per round (see the pr-shepherd skill § "Bot reviews are manually triggered"). So after a fix round's commits are pushed, re-trigger both *before* watching for the resulting comments — otherwise their reviews silently go stale.
+**No bot auto-reviews.** CodeRabbit and Cursor Bugbot are comment-triggered; Copilot is a requested reviewer; none re-review on their own (see the pr-shepherd skill § "Bot reviews are manually triggered"). So after a fix round's commits are pushed, re-trigger **CodeRabbit + Cursor Bugbot** *before* watching for the resulting comments — otherwise their reviews silently go stale. (Gemini's consumer code-review product was retired 2026-07-17 and posts nothing — never await it. Copilot is requested once at open, not per round.)
 
 ```bash
 # STEP 0: Re-trigger the per-round bot reviews (once per meaningful round; skip CI-only / label / no-diff rounds).
 #   Only the bots actually configured on this repo; assumes auto-review is disabled owner-side.
-#   CodeRabbit:  gh pr comment "$PR_NUMBER" --body "@coderabbitai review"   # incremental (full review only after a history-rewriting rebase)
-#   Copilot:     re-request the copilot-pull-request-reviewer[bot] reviewer on the new SHA
+#   CodeRabbit:    gh pr comment "$PR_NUMBER" --body "@coderabbitai review"   # incremental (use "full review" to recover a throttled/no-op round, or after a history-rewriting rebase)
+#   Cursor Bugbot: gh pr comment "$PR_NUMBER" --body "bugbot run"            # MUST be its own standalone top-level comment — never combined with another trigger, or it silently won't fire
+#   Copilot:       requested once at open, NOT per round (queue quota-blocked through 2026-08-01 → no-op expected)
 #                (exact gh mechanic in pr-shepherd § "Bot reviews are manually triggered")
 
 # STEP 1: Watch for ALL CI/CD checks to complete via the Monitor tool

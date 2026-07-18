@@ -193,6 +193,19 @@ pr-shepherd now **opens** a PR when invoked on a branch with no PR (Phase 0: sha
 
 **Upstreamable: partial** — the manual dual-bot policy + Phase-0 PR-creation are generic; the `@claude`-throttle-fallback wording and the assumption that auto-review is owner-disabled are environment-specific.
 
+#### K.1 — Bot-fact corrections (2026-07-18): triple-bot policy + CodeRabbit coverage truth
+**Change-set:** `0.12.0-fork.4` (in place)
+**Files:** the same six as § K.
+
+Corrects four factual errors the § K text carried, ported from a jb1 four-day PR-bot forensic audit (PRs 829–860):
+- **Gemini is dead.** Its consumer code-review product was retired 2026-07-17; every "Cursor/Gemini still auto-review on push" claim is corrected to "no bot auto-reviews" + an explicit "Gemini posts nothing, never await it." (It also auto-reviewed on *open*, not push, even while alive.)
+- **Cursor Bugbot is manually triggered, not an auto-reviewer.** The trigger table + handle-pr-comments STEP 0 now carry a **Cursor Bugbot** column/row: a **standalone top-level** `bugbot run` (or `@cursor review`) comment that MUST NOT be combined with another trigger in one comment (a combined comment silently fails to fire Bugbot — jb1 PR #841). The prior text relied on the false "Cursor auto-reviews" claim and never triggered Bugbot at all.
+- **Copilot is requested once at open, not per round** (its queue is quota-blocked through 2026-08-01, so a no-op is expected). Per-round re-request removed.
+- **`full review` recovers a throttled/no-op round** (not only "after a history-rewriting rebase").
+- **CodeRabbit coverage truth (new blockquote after the throttle paragraph):** a *clean* CodeRabbit pass posts **no review object** — it edits its pinned `summarize by coderabbit.ai` walkthrough comment (`between <base> and <head>` range is the signal); ~half of CodeRabbit "review objects" are empty reply containers (filter `.body != ""`). A missing review object means **UNKNOWN → read the walkthrough**, not `did-not-review`, and is **never** grounds to re-trigger (a false re-trigger drains the shared fair-usage meter). Mirrors jb1's always-loaded `proactive-gate-selection.md` fix (jb1 commit `daff6a20`).
+
+**Upstreamable: yes** — all five are vendor-factual, not environment-specific.
+
 ---
 
 ## Upstream Sync Procedure
