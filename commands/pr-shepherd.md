@@ -19,7 +19,7 @@ If no PR number is provided, uses the PR on the current branch — and if the br
 1. **Opens the PR if none exists** - Phase 0: push, create the PR, trigger initial reviews (skipped when a PR already exists)
 2. **Monitors CI/CD** - Watches for state changes via the `Monitor` tool (event-driven, not fixed-interval)
 3. **Monitors Reviews** - Watches for new comments and unresolved threads
-4. **Triggers CodeRabbit + Cursor Bugbot + Copilot reviews** - Manually, by default (none auto-review). Re-triggers the comment-triggered bots (CodeRabbit + Cursor Bugbot) per fix round; Copilot is requested once. See the pr-shepherd skill § "Bot reviews are manually triggered."
+4. **Triggers the bots this PR warrants** - Manually, by default, within each bot's cap (none auto-review except Gemini, once at open). Re-triggers only a round that changed behavior. See the pr-shepherd skill § "Bot reviews — manual triggers, chosen within each bot's cap."
 5. **Auto-fixes simple issues** - Lint, prettier, type errors
 6. **Asks before complex fixes** - Presents options with pros/cons for approval
 7. **Handles review comments** - Delegates to `handling-pr-comments` skill
@@ -73,4 +73,4 @@ If no PR number is provided, uses the PR on the current branch — and if the br
 - All code changes use TDD process
 - Complex issues always get user approval before fixing
 - Uses `handling-pr-comments` skill for review comment handling
-- **Bots are invoked, not awaited**: no bot auto-reviews — CodeRabbit and Cursor Bugbot are comment-triggered, Copilot is a requested reviewer. pr-shepherd triggers the configured bots by default on open and re-triggers CodeRabbit + Cursor Bugbot per fix round (Copilot once; opt out only in the invoking prompt; only the bots configured on the repo). **Gemini's consumer code-review product was retired 2026-07-17 — it no longer reviews; never await it.**
+- **Bots are invoked, not awaited**: no bot auto-reviews except Gemini Code Assist for GitHub, which reviews once at PR open and never again on push (re-trigger with `/gemini review` when a later SHA warrants it; never required). CodeRabbit, Cursor Bugbot, Copilot, and Codex are all comment-triggered / requested-reviewer bots. pr-shepherd fires the bots this PR warrants by default, within each bot's per-PR cap (opt out only in the invoking prompt; only the bots configured on the repo) — Bugbot is held back until the first logic-changing fix round and capped at one use, Copilot is opt-in once at open on smaller high-impact PRs, Codex gets up to 3 uses, and only a round that changed behavior owes a re-trigger at all. See the pr-shepherd skill § "Bot reviews — manual triggers, chosen within each bot's cap."

@@ -209,7 +209,7 @@ gh api "/repos/$OWNER/$REPO_NAME/pulls/$PR_NUMBER/comments/$COMMENT_ID/replies" 
 
 ### Phase 5: Resolve ALL Threads
 
-**Every thread must be resolved after responding.** Use GraphQL to resolve:
+**Every thread must be resolved after responding.** Whether to resolve a thread yourself (vs. leaving it for the human reviewer to close) is your discretion — the owner ruling here is that either is fine. If you do resolve individual threads, prefer dispatching that per-thread work to a subagent where feasible, so per-thread context doesn't pile up in the main session. Use GraphQL to resolve:
 
 ```bash
 THREAD_ID="PRRT_kwDOK-xA485..."  # From GraphQL query
@@ -231,21 +231,30 @@ gh api graphql -f query='mutation {
 
 **THE #1 WORKFLOW FAILURE: Stopping after Phase 5-6 without checking for NEW comments.**
 
-**No bot auto-reviews.** CodeRabbit and Cursor Bugbot are comment-triggered; Copilot is a requested reviewer; none re-review on their own (see the pr-shepherd skill § "Bot reviews are manually triggered"). So after a fix round's commits are pushed, re-trigger **CodeRabbit + Cursor Bugbot** *before* watching for the resulting comments — otherwise their reviews silently go stale. (Gemini's consumer code-review product was retired 2026-07-17 and posts nothing — never await it. Copilot is requested once at open, not per round.)
+**No bot auto-reviews except Gemini** (once, at PR open, never on push). CodeRabbit, Cursor Bugbot, Copilot, and Codex are all comment-triggered or requested-reviewer bots — none re-review on their own (see the pr-shepherd skill § "Bot reviews — manual triggers, chosen within each bot's cap"). So when this fix round **changed behavior** (§ Materiality in that section — doc/test-only/nit rounds owe none), re-trigger the bots this round warrants, within their caps, *before* watching for the resulting comments — otherwise their reviews silently go stale.
 
 ```bash
-# STEP 0: Re-trigger the per-round bot reviews (once per meaningful round; skip CI-only / label / no-diff rounds).
+# STEP 0: Re-trigger the bots this round owes — ONLY if the round changed behavior (§ Materiality).
+#   Doc/test-only/nit rounds owe no re-trigger and converge locally.
 #   Only the bots actually configured on this repo; assumes auto-review is disabled owner-side.
-#   CodeRabbit:    gh pr comment "$PR_NUMBER" --body "@coderabbitai review"   # incremental (use "full review" to recover a throttled/no-op round, or after a history-rewriting rebase)
-#   Cursor Bugbot: gh pr comment "$PR_NUMBER" --body "bugbot run"            # MUST be its own standalone top-level comment — never combined with another trigger, or it silently won't fire
-#   Copilot:       requested once at open, NOT per round (queue quota-blocked through 2026-08-01 → no-op expected)
-#                (exact gh mechanic in pr-shepherd § "Bot reviews are manually triggered")
+#   Always "full review" for CodeRabbit — never the incremental trigger, which silently no-ops on already-reviewed commits.
+#   CodeRabbit:    gh pr comment "$PR_NUMBER" --body "@coderabbitai full review"
+#   Cursor Bugbot: gh pr comment "$PR_NUMBER" --body "bugbot run"   # standalone top-level only, never combined with another trigger, never more than once per PR — held back until the first logic-changing round
+#   Codex:         top-level mention + exactly the word "review"    # up to 3 uses per PR
+#   Copilot:       once, at open only, opt-in on smaller high-impact PRs — no per-round re-request (exception: once, if the earlier review was an error notice)
+#   Gemini:        top-level "/gemini review" — only to cover a SHA past its free open-PR pass
+#                (exact gh mechanic and per-bot caps in pr-shepherd § "Bot reviews — manual triggers, chosen within each bot's cap")
+#   Batch this round's fixes into one push, then trigger each chosen bot once — never a review per commit.
+#   Any throttle/quota/rate-limit notice from any bot: don't re-fire, don't re-route on your own — stop and check in with the user.
 
 # STEP 1: Watch for ALL CI/CD checks to complete via the Monitor tool
 PR_NUMBER=<number>
 # Use the Monitor tool to watch for state changes (see the pr-shepherd skill for the canonical script).
 # Monitor streams events only on state change, so quiet periods cost 0 tokens — strictly cheaper than
 # blocking the agent on CI completion or waking it on a fixed polling interval.
+# This watches CI only — it is not a bot-round verification. For each bot triggered in STEP 0, wait for
+# its own artifact with a separate, one-shot Monitor keyed to that bot's clean/findings signal (see the
+# pr-shepherd skill § "Awaiting a bot's review round"), not by polling turns or treating the trigger's ack as done.
 
 # STEP 2: Check for NEW comments since your last response
 OWNER=$(gh repo view --json owner -q .owner.login)
@@ -377,6 +386,7 @@ Before declaring PR comments handled:
 - [ ] **ALL threads have been resolved** (no unresolved threads remaining)
 - [ ] All responses include proper attribution
 - [ ] Out-of-scope comments have been either fixed OR have GitHub issues created
+- [ ] Every bot round this PR owed (§ Materiality, pr-shepherd skill) is confirmed clean at the SHA it ran against, from the bot's own artifact — not the trigger's ack
 
 **DO NOT skip the "Outside diff range" check (Phase 2b) - this is the #2 cause of incomplete PR handling.**
 

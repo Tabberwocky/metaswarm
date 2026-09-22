@@ -121,12 +121,12 @@ bd label add <task-id> review:approved
 
 ### Step 4: Completion
 
-When PR is ready to merge:
+Before closing, confirm — first-party, not from memory — that every bot round this PR **owed** (per the pr-shepherd skill's Bot reviews / Materiality rules) has actually run and is clean at the SHA it ran against. Then, when PR is ready to merge:
 
 ```bash
-# All checks passing, all threads resolved
+# All checks passing, all threads resolved, all owed bot rounds clean at head SHA
 bd update <task-id> --status completed
-bd close <task-id> --reason "PR #${PR_NUMBER} ready to merge. All CI green, all threads resolved."
+bd close <task-id> --reason "PR #${PR_NUMBER} ready to merge. All CI green, all threads resolved, all owed bot rounds clean at <sha>."
 
 # Notify Issue Orchestrator
 # The epic can now proceed to human approval for merge
@@ -215,6 +215,7 @@ Before marking complete, verify:
 - [ ] All review threads are resolved
 - [ ] No pending questions from reviewers
 - [ ] Local validation passes (`pnpm lint && pnpm typecheck && pnpm test`)
+- [ ] Every bot round this PR owed has run and is clean at the SHA it ran against (confirmed first-party, not recalled from earlier in the session)
 
 ---
 
@@ -300,9 +301,14 @@ The PR Shepherd reports status via PR comments:
 - Resolved: X/Y threads
 - Pending: <list of unresolved>
 
-### Ready to Merge
+### Bot Rounds
 
-<Yes/No - with blockers if No>
+- <which bots ran, at which SHA, clean or with findings; which owed round was skipped and why, if any>
+
+### Ready to merge (my assessment)
+
+YES — every owed round clean at <sha>, CI green. / NO — <what's outstanding>.
+(Never NO for a process technicality — if the next owed round isn't warranted, say YES and name the skipped round and why. A round genuinely in flight is not a hand-back moment; wait for it rather than reporting an interim verdict.)
 ```
 
 ---

@@ -77,6 +77,8 @@ In both the `implement` and `review` `env -i` invocation blocks, unconditional e
 
 Replaced every `/loop 5m` / `--watch` / "every 5 minutes" polling pattern with the `Monitor` tool. `Monitor` fires a notification only when the polled state actually changes — quiet CI periods cost 0 tokens. `/loop 5m` fires on a fixed schedule regardless of state and lands exactly on the 5-minute prompt-cache TTL boundary (worst-case for cache hit rate). `gh pr checks --watch` blocks the agent entirely until CI completes. Added the canonical PR-state Monitor script and a "When NOT to use Monitor" carve-out (truly periodic tasks stay on `/loop`).
 
+**Corrected in `0.12.0-fork.5` (see § L):** the original Monitor script treated `mergeStateStatus == "CLEAN"` as `READY_TO_MERGE`, which is wrong — that field reports conflicts and required checks only, never bot-review readiness. It now exits on `CI_COMPLETE` (CI terminal, no merge-readiness claim), and stays armed only while work is genuinely in progress rather than being re-armed indefinitely through Phase 2. A separate, narrower pattern — one silent Monitor per awaited bot round, keyed to that bot's own artifact — now covers waiting on a specific bot's result.
+
 **Upstreamable: yes** — strictly cheaper pattern for all PR-shepherding use cases.
 
 ---
@@ -189,6 +191,8 @@ Three project-agnostic habits injected into adopters' CLAUDE.md at setup, delibe
 **Change-set:** `0.12.0-fork.4`
 **Files:** `skills/pr-shepherd/SKILL.md` (new § "Bot reviews are manually triggered" + new "Phase 0: Open the PR"; per-round re-trigger wired into Phase 4; fixed the auto-review framing in Common Mistakes), `skills/handling-pr-comments/SKILL.md` (Phase 7 STEP 0 per-round re-trigger + reframed auto-review line + activation mentions), `commands/pr-shepherd.md` + `.claude/commands/pr-shepherd.md`, `commands/handle-pr-comments.md` + `.claude/commands/handle-pr-comments.md` (manually-kept identical pairs)
 
+> **Superseded by § L (`0.12.0-fork.5`).** The "manual dual-bot policy" below described a two-bot (CodeRabbit + Copilot) world with Cursor/Gemini still assumed auto. That assumption was already wrong by K.1 below, and the roster itself is now five bots (CodeRabbit, Cursor Bugbot, Copilot, Codex, Gemini), each with its own cap and placement per § L. Kept here for change history; don't treat the "dual-bot" framing as current.
+
 pr-shepherd now **opens** a PR when invoked on a branch with no PR (Phase 0: shareability gate → push → duplicate guard → `gh pr create` → initial bot triggers → report), skipping cleanly when a PR already exists. It supersedes `issue-orchestrator`'s manual "Option B: `gh pr create` then invoke pr-shepherd" step. Adds the **manual dual-bot policy**: CodeRabbit + Copilot don't auto-review, so the skill triggers both explicitly — initial on open, re-trigger per meaningful fix round — **by default without asking** (opt out only in the invoking prompt; only the bots a repo actually uses; Cursor/Gemini still auto). Copilot's `gh` reviewer-request mechanic is documented as a tiered fallback (`gh pr edit --add-reviewer` → REST `requested_reviewers` → Reviewers UI; confirm on first live use). Includes the CodeRabbit-throttle → `@claude` fallback. Adapted from jb1's `pr-web`/`pr-shepherd` (commit `6a498c9d`), MCP→`gh` idiom. The global behavior policy lives in the user-level `~/.claude/CLAUDE.md` § "PR bot invocation"; this is the metaswarm-fork half.
 
 **Upstreamable: partial** — the manual dual-bot policy + Phase-0 PR-creation are generic; the `@claude`-throttle-fallback wording and the assumption that auto-review is owner-disabled are environment-specific.
@@ -197,14 +201,40 @@ pr-shepherd now **opens** a PR when invoked on a branch with no PR (Phase 0: sha
 **Change-set:** `0.12.0-fork.4` (in place)
 **Files:** the same six as § K.
 
+> **Partially superseded by § L (`0.12.0-fork.5`).** Two claims below are now known wrong: "Gemini is dead" (it wasn't — Gemini Code Assist auto-reviews once at PR open, per the owner's 2026-09-22 ruling) and "Copilot's queue is quota-blocked through 2026-08-01" (that date has passed; Copilot is opt-in/once/at-open on its own merits, not because of a quota block). The Cursor Bugbot and CodeRabbit-coverage corrections below still hold, though Bugbot's placement changed again in § L (held back from open, capped at one use, fired at the first logic-changing round rather than every round).
+
 Corrects four factual errors the § K text carried, ported from a jb1 four-day PR-bot forensic audit (PRs 829–860):
-- **Gemini is dead.** Its consumer code-review product was retired 2026-07-17; every "Cursor/Gemini still auto-review on push" claim is corrected to "no bot auto-reviews" + an explicit "Gemini posts nothing, never await it." (It also auto-reviewed on *open*, not push, even while alive.)
+- ~~**Gemini is dead.** Its consumer code-review product was retired 2026-07-17; every "Cursor/Gemini still auto-review on push" claim is corrected to "no bot auto-reviews" + an explicit "Gemini posts nothing, never await it." (It also auto-reviewed on *open*, not push, even while alive.)~~ **Wrong — see § L.** Gemini Code Assist for GitHub is alive and is the one bot that still auto-reviews (once, at open, never on push).
 - **Cursor Bugbot is manually triggered, not an auto-reviewer.** The trigger table + handle-pr-comments STEP 0 now carry a **Cursor Bugbot** column/row: a **standalone top-level** `bugbot run` (or `@cursor review`) comment that MUST NOT be combined with another trigger in one comment (a combined comment silently fails to fire Bugbot — jb1 PR #841). The prior text relied on the false "Cursor auto-reviews" claim and never triggered Bugbot at all.
-- **Copilot is requested once at open, not per round** (its queue is quota-blocked through 2026-08-01, so a no-op is expected). Per-round re-request removed.
+- ~~**Copilot is requested once at open, not per round** (its queue is quota-blocked through 2026-08-01, so a no-op is expected). Per-round re-request removed.~~ **Date passed — see § L.** Copilot is still once-at-open, but because that's where a cold full-diff read pays most on a small high-impact PR, not because of a quota block.
 - **`full review` recovers a throttled/no-op round** (not only "after a history-rewriting rebase").
-- **CodeRabbit coverage truth (new blockquote after the throttle paragraph):** a *clean* CodeRabbit pass posts **no review object** — it edits its pinned `summarize by coderabbit.ai` walkthrough comment (`between <base> and <head>` range is the signal); ~half of CodeRabbit "review objects" are empty reply containers (filter `.body != ""`). A missing review object means **UNKNOWN → read the walkthrough**, not `did-not-review`, and is **never** grounds to re-trigger (a false re-trigger drains the shared fair-usage meter). Mirrors jb1's always-loaded `proactive-gate-selection.md` fix (jb1 commit `daff6a20`).
+- **CodeRabbit coverage truth (new blockquote after the throttle paragraph):** a *clean* CodeRabbit pass posts **no review object** — it edits its pinned `summarize by coderabbit.ai` walkthrough comment (`between <base> and <head>` range is the signal); ~half of CodeRabbit "review objects" are empty reply containers (filter `.body != ""`). A missing review object means **UNKNOWN → read the walkthrough**, not `did-not-review`, and is **never** grounds to re-trigger (a false re-trigger drains the shared fair-usage meter). Mirrors jb1's always-loaded `proactive-gate-selection.md` fix (jb1 commit `daff6a20`). **Refined in § L:** the walkthrough's `between <base> and <head>` range is UNKNOWN, not clean — the actual clean signal is the `recent_review` block of the same summary comment.
 
 **Upstreamable: yes** — all five are vendor-factual, not environment-specific.
+
+---
+
+### L. PR-bot policy realigned to knowledge_base pr-management pack + owner rulings (2026-09-22)
+**Change-set:** `0.12.0-fork.5`
+**Files:** `skills/pr-shepherd/SKILL.md`, `agents/pr-shepherd-agent.md`, `skills/handling-pr-comments/SKILL.md`, `commands/pr-shepherd.md` + `.claude/commands/pr-shepherd.md`, `commands/handle-pr-comments.md` + `.claude/commands/handle-pr-comments.md` (manually-kept identical pairs)
+
+Realigns all PR-bot invocation guidance to the canonical portable policy at `~/Coding/knowledge_base/docs/pr-management/bot-invocation-policy.md`, incorporating owner rulings from 2026-09-22 that supersede §§ K/K.1 above:
+
+- **Gemini Code Assist for GitHub is alive**, not retired: it auto-reviews **once at PR open, never on push** (so its pass often covers a stale SHA); re-trigger with top-level `/gemini review`; it reviews markdown; it is never required.
+- **Copilot**: opt-in, at most once at open, on smaller high-impact PRs; re-request **once only** if the review comes back as an error notice (which doesn't consume the use); otherwise never re-request. Removed the "quota-blocked through 2026-08-01" framing — that date has passed and was never the real constraint.
+- **Cursor Bugbot**: at most once per PR, held back from open, fired as a standalone top-level `bugbot run` at the **first logic-changing fix round** — not "re-post every round" as §K/K.1 had it. If no such round arrives, it never fires (correct non-spend).
+- **Codex**: new to this skill set — up to 3 uses per PR, top-level mention + exactly the word `review` (anything else launches an autonomous coding task), with explicit mention-hygiene guidance for these instruction files vs. live PR surfaces.
+- **CodeRabbit**: always `@coderabbitai full review`, never the incremental trigger (which silently no-ops on already-reviewed commits); don't push mid-review (a push aborts it).
+- **Materiality**: re-review only when fix commits changed behavior, including behavior-changing edits to agent-instruction files; doc/test-only/nit rounds converge locally with no re-review.
+- **Three-round cap**: before a fourth round, run `/enforce` in `pr` mode against the findings it would chase, then get the user's go-ahead.
+- **Throttles**: generalized from CodeRabbit-only to all bots — stop and check in with the user rather than re-firing or re-routing; the CodeRabbit-throttle → `@claude` fallback is kept as the worked example of what "check in" looks like.
+- **Round counting**: by artifact, never the trigger's ack; read full bodies and expand `<details>`; corrected a 200-char body truncation in `commands/handle-pr-comments.md` that ran *before* the "Actionable comments posted" substring test, which could silently hide the match.
+- **Convergence**: findings from 2+ bots are a signal, not a verdict — bots share priors and can converge on the same wrong diagnosis.
+- **Thread resolution**: left to agent discretion (owner ruling) rather than "never auto-resolve" — with a preference for dispatching per-thread resolution work to a subagent when the agent does resolve threads itself, to keep that context out of the main session.
+- **Readiness verdict**: replaced "CI green + threads resolved" readiness claims with an explicit, first-party-confirmed `Ready to merge (my assessment): YES/NO` line everywhere a PR is handed back, matching the canonical policy's § 7 termination rule (never `NO` for process reasons).
+- **Monitor usage**: corrected the canonical Monitor script, which had treated `mergeStateStatus == "CLEAN"` as `READY_TO_MERGE` (that field reports conflicts/required-checks only); it now exits on `CI_COMPLETE`. Added a separate, narrower "one silent Monitor per awaited bot round, keyed to that bot's own artifact" pattern for waiting on a specific bot's result, replacing indefinite re-arming through Phase 2.
+
+**Upstreamable: partial** — the bot-policy corrections and Monitor fixes are vendor-factual and generic; the pointer to `~/Coding/knowledge_base/docs/pr-management/` and the `/enforce`-gated fourth-round check are environment-specific.
 
 ---
 
@@ -214,7 +244,7 @@ When a new upstream tag is available:
 
 1. `git fetch upstream`
 2. `git merge upstream/main` (or `git rebase custom` onto the new upstream tag) into `custom`
-3. Resolve conflicts — note that `skills/pr-shepherd/SKILL.md`, `skills/handling-pr-comments/SKILL.md`, `skills/plan-review-gate/SKILL.md`, and `skills/orchestrated-execution/SKILL.md` each carry multiple groups (B+G, B+C+E2, D+H, D+H respectively), so cherry-picking upstreamable groups will produce conflicts in shared files
+3. Resolve conflicts — note that `skills/pr-shepherd/SKILL.md`, `skills/handling-pr-comments/SKILL.md`, `skills/plan-review-gate/SKILL.md`, and `skills/orchestrated-execution/SKILL.md` each carry multiple groups (B+G+K+K.1+L, B+C+E2+K+K.1+L, D+H, D+H respectively), so cherry-picking upstreamable groups will produce conflicts in shared files
 4. `node lib/sync-resources.js --sync` to regenerate co-located copies
 5. `node lib/sync-resources.js --check` — must pass before tagging
 6. Bump `fork.N` in all 5 version files

@@ -21,11 +21,12 @@ This command helps systematically address PR review comments from automated tool
 1. All CI checks pass
 2. **EVERY** code review comment has been triaged per Proportional Response (likelihood × impact): correctness, security/privacy/data/money/regulatory, and human-authored comments are always addressed; trivial/nitpicks/out-of-scope are assessed proportionally — fixed, deferred (captured per the deferred-feedback protocol), or pushed back on with evidence
 3. **EVERY** comment thread has received an individual response
-4. All threads are marked as resolved (after reviewer approval)
+4. All threads are marked as resolved (resolving is the agent's discretion — see § Thread Resolution Policy)
 5. Any work > 1 day has a GitHub issue created
 6. No pending reviewer comments awaiting response
 7. ALL tests pass, there are no pre-existing issues or flaky tests - these are excuses. Fix the underlying issues, don't disable tests.
 8. **No new reviews after last commit with actionable items** (Section 1d)
+9. Every bot round this PR owed (§ Materiality — see pr-shepherd skill) has run and is confirmed clean at the current SHA
 
 ### Mandatory Comment Handling Rules
 
@@ -78,17 +79,17 @@ REPEAT until (all_threads_resolved AND no_new_comments AND no_new_reviews_after_
   3. For each comment: fix OR create issue OR respond with disagreement
   4. Run validation: lint, typecheck, and tests
   5. Commit and push
-  5b. Re-trigger CodeRabbit + Cursor Bugbot for this round (they don't auto-re-review): `@coderabbitai review` **plus a separate standalone top-level `bugbot run` comment** — never combine the two triggers in one comment, or Bugbot silently won't fire. Only the bots configured on the repo; once per meaningful round. Copilot is a requested reviewer invoked once at open — do **not** re-request it per round (its queue is quota-blocked through 2026-08-01, so a no-op is expected). See pr-shepherd § "Bot reviews are manually triggered."
+  5b. Re-trigger only the bots this round owes, within their caps — only if the fix commits **changed behavior** (doc/test-only/nit rounds owe no re-trigger). `@coderabbitai full review` (always full, never the incremental trigger); Cursor Bugbot's single per-PR use, if not yet spent, fires here as a **separate standalone top-level `bugbot run` comment** — never combine it with another trigger, or Bugbot silently won't fire; Codex within its 3-use cap via a top-level mention + exactly the word `review`. Only the bots configured on the repo; batch the round's fixes into one push and trigger each chosen bot once. Copilot is opt-in, once, at open only — never re-requested per round (exception: once, if its prior review was an error notice). Any throttle/quota notice from any bot: don't re-fire, don't re-route yourself — stop and check in with the user. See pr-shepherd § "Bot reviews — manual triggers, chosen within each bot's cap."
   6. Respond to EVERY thread individually
   6b. For "Outside diff range" comments: leave a general PR comment acknowledging
   7. CRITICAL: WAIT FOR CI/CD, then RE-CHECK for NEW comments/reviews
      - Monitor the CI/CD pipeline via the `Monitor` tool — see the pr-shepherd skill for the canonical script. Monitor fires events only on state change (0 tokens during quiet periods).
      - Wait until ALL checks complete (not just pass - complete)
-     - No bot auto-reviews (Gemini was retired 2026-07-17 and posts nothing); CodeRabbit + Cursor Bugbot post their comments only after the step-5b re-trigger
+     - No bot auto-reviews except Gemini (once, at open, never on push); the other bots post comments only after the step-5b re-trigger, and only if this round owed one — for each bot actually triggered, wait for its own artifact with a one-shot Monitor keyed to that bot's clean/findings signal (pr-shepherd skill § "Awaiting a bot's review round"), never by treating the trigger's ack as the review
      - Check BOTH inline threads AND review bodies for new feedback
-     - Check for NEW REVIEWS with "Actionable comments posted: X" (X > 0)
+     - Check for NEW REVIEWS with "Actionable comments posted: X" (X > 0) — read the **full** review body for this check, not a truncated preview (see § 4)
   8. If new comments OR new reviews exist -> GO TO STEP 1
-  9. If no new comments/reviews AND all checks complete -> verify all threads resolved, then complete
+  9. If no new comments/reviews AND all checks complete -> verify all threads resolved AND every owed bot round is clean at the current SHA, then complete
 ```
 
 **THE #1 WORKFLOW FAILURE**: Stopping after responding without checking for new comments/reviews.
@@ -101,7 +102,7 @@ Automated reviewers POST NEW COMMENTS after analyzing your fix commit. You MUST 
 
 - Resolve when: code committed + responded + reviewer acknowledged
 - Resolve immediately if declining a suggestion (with explanation)
-- Never auto-resolve without reviewer acknowledgment
+- **Resolving without waiting for reviewer acknowledgment is your discretion**, not forbidden — the owner ruling here is that either is fine. If you do resolve individual threads yourself, prefer dispatching that per-thread work to a subagent where feasible, so per-thread context doesn't pile up in the main session.
 
 ---
 
@@ -141,14 +142,13 @@ gh api graphql -f query='{ rateLimit { limit remaining resetAt } }' -q '.data.ra
 2. Make your fixes and commit
 3. **RE-FETCH comment IDs** before posting responses (comments may have been updated/replaced)
 4. Post responses to CURRENT comment IDs (not stale ones from before your commit)
-5. **WAIT for reviewer confirmation** - Do NOT resolve threads immediately after your reply
-6. Only resolve threads when: (a) reviewer confirms they're satisfied, OR (b) you're explicitly declining/ignoring the suggestion
+5. Resolve threads at your discretion once you've responded — waiting for reviewer confirmation first, or resolving right after your reply, are both fine (owner ruling); when declining a suggestion, resolve immediately with the explanation in your reply
 
 **Resolution Policy**:
 
-- **Wait for reviewer approval** before resolving addressed feedback
-- **Resolve immediately** only if declining a suggestion (explain why in your reply)
-- **Never auto-resolve** after posting a fix - let the reviewer verify
+- **Resolving is your discretion**, not a required wait — either resolve once you've responded, or leave it for the reviewer to confirm and close; both are acceptable
+- **Resolve immediately** when declining a suggestion (explain why in your reply)
+- If you resolve threads yourself, prefer dispatching that per-thread work to a subagent where feasible, to keep per-thread context out of the main session
 
 **Pattern**: Use GraphQL for thread operations (variables via -f/-F; parse with `-q` on fetch or `jq` for stored JSON) and REST for posting replies.
 
@@ -449,7 +449,7 @@ for review in reviews:
             'author': review['user']['login'],
             'state': review['state'],
             'submitted': review['submitted_at'],
-            'body': review['body'][:200] if review['body'] else ''
+            'body': review['body'] if review['body'] else ''  # keep FULL body — truncating before the "Actionable comments posted" test below can hide the match
         })
 
 if new_reviews:
@@ -461,7 +461,7 @@ if new_reviews:
         print(f"  Submitted: {r['submitted']}")
         if 'Actionable comments posted:' in r['body']:
             print(f"  CONTAINS ACTIONABLE COMMENTS!")
-        print(f"  Body: {r['body'][:150]}...")
+        print(f"  Body (first 150 chars, full body was tested above): {r['body'][:150]}...")
 else:
     print("No new reviews after last commit")
 PYEOF
@@ -523,7 +523,9 @@ Use the `Monitor` tool to watch for CI/CD state changes — see the pr-shepherd 
 ```text
 PR_NUMBER=XXX
 # Invoke the Monitor tool against PR_NUMBER (canonical script lives in the pr-shepherd skill).
-# It emits a chat event whenever CI status, comments, or reviews change, and exits on READY_TO_MERGE.
+# It emits a chat event whenever CI status, comments, or reviews change, and exits on CI_COMPLETE
+# (a CI signal only — not a bot-review or merge-readiness verdict; verify bot rounds separately,
+# per the pr-shepherd skill § "Awaiting a bot's review round").
 ```
 
 Then re-check for new comments using the workflow in Section 1.
@@ -547,9 +549,10 @@ A PR is **NOT ready for merge** until:
 1. All CI checks pass
 2. **EVERY** comment has been triaged per Proportional Response: correctness, security/privacy/data/money/regulatory, and human-authored comments addressed; trivial/nitpicks/out-of-scope assessed proportionally — fixed, deferred (captured per the deferred-feedback protocol), or pushed back on with evidence
 3. **EVERY** thread has an individual response
-4. All threads are marked resolved (after reviewer approval)
+4. All threads are marked resolved (resolving is the agent's discretion — either after reviewer approval or right after responding; see § Thread Resolution Policy)
 5. GitHub issues created for any deferred work (> 1 day)
 6. No pending reviewer comments awaiting response
 7. **No new reviews after last commit with actionable items**
+8. **Every bot round this PR owed has run and is confirmed clean at the current SHA**, checked first-party from the bot's own artifact right before declaring complete — not recalled from an earlier check in this session
 
-**If ANY of these are false, continue iterating.** Do not declare complete prematurely.
+**If ANY of these are false, continue iterating.** Do not declare complete prematurely. When handing back an open PR, state the verdict explicitly in one line — `Ready to merge (my assessment): YES — every owed round clean at <sha>, CI green` or `NO — <what's outstanding>` — never leave it implied.
