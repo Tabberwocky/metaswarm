@@ -237,7 +237,6 @@ while true; do
     reviewCount: (.reviews | length)
   }' 2>/dev/null || echo "POLL_FAIL")
   if [ "$snapshot" != "$prev" ] && [ -n "$snapshot" ]; then
-    echo "[$(date -u +%H:%M:%SZ)] $snapshot"
     prev="$snapshot"
     checkLen=$(echo "$snapshot" | jq -r '.checks | length' 2>/dev/null || echo "0")
     running=$(echo "$snapshot" | jq -r '[.checks[] | select(.status == "IN_PROGRESS" or .status == "PENDING" or .status == "QUEUED" or .status == "EXPECTED")] | length' 2>/dev/null || echo "1")
@@ -255,7 +254,7 @@ done`
 
 **Behavior:**
 
-- Fires on every CI state change (check flip, new comment, new review appearing in the snapshot).
+- Silent while CI runs — no line per state change, so it costs exactly one wake (CLAUDE.md § "Awaiting a bot's result"). New comments and reviews are read when it fires, not streamed.
 - Exits cleanly on `CI_COMPLETE` (all checks terminal) — that's a CI signal only, not a merge-readiness verdict.
 - Times out after 15 minutes — re-arm with a fresh `Monitor` call only while work is genuinely in progress (a push just landed, CI is running). Don't leave a watch armed on an idle, converged PR — re-check at the merge step or on a real event instead.
 
@@ -269,7 +268,7 @@ After firing a bot trigger (§ "Bot reviews"), don't poll for the result with re
 until <artifact-check-for-this-bot>; do sleep 60; done; echo "landed"
 ```
 
-Run the check once by hand against an existing artifact first to prove it can fire, then arm it. It emits one line and exits when the artifact lands — zero tokens while waiting, exactly one wake. One monitor per awaited round; don't stack them. Never arm a watch on an idle, already-converged PR.
+When a round triggers several bots, one until-loop checks all of them — a tested multi-bot template (CodeRabbit, Codex, Gemini, Copilot, Bugbot) is in `~/.claude/skills/gh-pr-feedback/SKILL.md` Step 9b. Run the check once by hand against an existing artifact first to prove it can fire, then arm it. It emits one line and exits when the artifact lands — zero tokens while waiting, exactly one wake. One monitor per awaited round; don't stack them. Never arm a watch on an idle, already-converged PR.
 
 Run GTG inside a `Monitor` watch script as the **single source of truth** for PR *CI/thread* status (not bot-review readiness, which is verified separately per § "Bot reviews"):
 

@@ -253,7 +253,7 @@ PR_NUMBER=<number>
 # Monitor streams events only on state change, so quiet periods cost 0 tokens — strictly cheaper than
 # blocking the agent on CI completion or waking it on a fixed polling interval.
 # This watches CI only — it is not a bot-round verification. For each bot triggered in STEP 0, wait for
-# its own artifact with a separate, one-shot Monitor keyed to that bot's clean/findings signal (see the
+# its own artifact with ONE one-shot Monitor for the whole round, keyed to each bot's clean/findings signal (see the
 # pr-shepherd skill § "Awaiting a bot's review round"), not by polling turns or treating the trigger's ack as done.
 
 # STEP 2: Check for NEW comments since your last response
