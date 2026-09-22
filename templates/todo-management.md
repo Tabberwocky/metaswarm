@@ -42,7 +42,7 @@ Check current task list frequently, especially:
 
 Update task status in real-time:
 
-- Mark tasks as `in_progress` BEFORE starting work: `bd update <id> --status=in_progress`
+- Claim tasks before starting work: `bd update <id> --claim`
 - Only have ONE task `in_progress` at a time
 - Mark as closed IMMEDIATELY after finishing: `bd close <id> --reason="..."`
 - Use for tasks with 3+ steps or requiring systematic tracking
@@ -93,11 +93,11 @@ bd blocked                        # show all blocked issues
 ```bash
 1. bd ready              # Check available work
 2. bd show <id>          # Review issue details
-3. bd update <id> --status=in_progress  # Claim it
+3. bd update <id> --claim               # Claim it
 4. # Complete the work
 5. bd close <id> --reason="Completed in commit <SHA>"
 6. bd ready              # Find next task
-7. bd sync               # Push BEADS changes to git
+7. bd dolt push          # If a shared Dolt remote is configured and Beads changed
 ```
 
 ## Creating New Tasks
@@ -118,4 +118,4 @@ bd dep add <tests-id> <feature-id>  # Tests depend on feature
 - Before context switches: Review and update all in_progress items
 - During long tasks: Periodically update progress with `bd update <id> --notes="..."`
 - After completing features: Close all related issues: `bd close <id1> <id2> ...`
-- At session end: Always run `bd sync`
+- At session end: If a shared Dolt remote is configured and Beads changed, run `bd dolt push`

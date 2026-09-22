@@ -16,7 +16,7 @@ Beads is issue tracking that lives in your repo, making it perfect for AI coding
 >
 > If the repo already has a custom BEADS setup, do not use metaswarm's stock BEADS templates, config, or assumptions as a replacement; follow the repo-local/custom setup.
 
-The commands and storage conventions below (e.g. `.beads/issues.jsonl`, `bd sync`, auto-sync-with-commits) are **examples only**, not defaults. A repo may be legacy JSONL, Dolt-backed, or use a repo-specific shared `BEADS_DIR` workflow — confirm with `bd where --json` and the repo-local guide before running any backend-specific operation.
+The commands and storage conventions below (e.g. `.beads/issues.jsonl`, `bd dolt pull`/`bd dolt push`, auto-sync-with-commits) are **examples only**, not defaults. A repo may be legacy JSONL, Dolt-backed, or use a repo-specific shared `BEADS_DIR` workflow — confirm with `bd where --json` and the repo-local guide before running any backend-specific operation.
 
 ## Quick Start
 
@@ -32,12 +32,13 @@ bd list
 # View issue details
 bd show <issue-id>
 
-# Update issue status
-bd update <issue-id> --status in_progress
-bd update <issue-id> --status done
+# Claim and close work
+bd update <issue-id> --claim
+bd close <issue-id> --reason "Completed"
 
-# Sync with git remote
-bd sync
+# If this repo configures a shared Dolt remote:
+bd dolt pull
+bd dolt push
 ```
 
 ### Working with Issues
@@ -60,7 +61,7 @@ Issues in Beads are:
 **Developer Focused**
 
 - Issues live in your repo, right next to your code
-- Works offline, syncs when you push
+- Works offline; use `bd dolt push` only when a shared remote is configured and your Beads state changed
 - Fast, lightweight, and stays out of your way
 
 **Git Integration**

@@ -23,22 +23,36 @@ Activate this skill when ANY of these conditions are true:
 
 ### Phase 1: Discover and Filter Comments
 
-Run the filtering script to identify actionable comments:
+Enumerate every surface a reviewer can write to — no repo-local scripts needed:
 
 ```bash
-# Filter actionable vs non-actionable comments
-bin/pr-comments-filter.sh <PR_NUMBER>
+PR_NUMBER=<number>
+OWNER=$(gh repo view --json owner -q .owner.login)
+REPO=$(gh repo view --json name -q .name)
+
+# 1. Inline review comments — original_commit_id is where each was written (commit_id moves forward to each new head)
+gh api "repos/$OWNER/$REPO/pulls/$PR_NUMBER/comments" --paginate \
+  --jq '.[] | {id, in_reply_to_id, user: .user.login, path, line: (.line // .original_line), original_commit_id: .original_commit_id[0:7], body}'
+
+# 2. Review objects — FULL bodies, never truncated ("Actionable comments posted", "Outside diff range", and <details> nit blocks live here)
+gh api "repos/$OWNER/$REPO/pulls/$PR_NUMBER/reviews" --paginate \
+  --jq '.[] | select((.body // "") != "") | {id, user: .user.login, state, commit_id: .commit_id[0:7], submitted_at, body}'
+
+# 3. Top-level comments — Codex clean-pass notes, CodeRabbit's summary (edited in place: read updated_at), notices, human discussion
+gh api "repos/$OWNER/$REPO/issues/$PR_NUMBER/comments" --paginate \
+  --jq '.[] | {id, user: .user.login, created_at, updated_at, body}'
+
+# 4. PR body — Cursor Bugbot writes its summary here (<!-- CURSOR_SUMMARY -->)
+gh pr view "$PR_NUMBER" --json body -q .body
+
+# 5. Review threads — disposition state per thread: run the query in § Mandatory Pre-Completion Check
 ```
 
-This script:
-
-- Filters out non-actionable comments (confirmations, acknowledgments, fingerprinting)
-- Categorizes actionable comments by priority (Critical → Low)
-- Shows comment IDs and details for processing
+**Don't filter by author while enumerating.** Classify afterward: the review bots are `coderabbitai[bot]`, `chatgpt-codex-connector[bot]`, `cursor[bot]`, `copilot-pull-request-reviewer[bot]` (its inline comments are authored by `Copilot`), and `gemini-code-assist[bot]` — REST logins carry `[bot]`; GraphQL and `gh pr view --json` strip it. Anyone else is a human: always process. Set aside the non-actionable: trigger acks, a bot's own walkthrough/summary, and throttle/quota/error notices (those matter for round-counting — pr-shepherd § "Verifying a round" — not for disposition).
 
 ### Phase 2: Triage Actionable Comments
 
-The filter script categorizes by priority:
+Triage by priority. The markers below are CodeRabbit's; other bots mark severity in their own formats — read the content and place it the same way:
 
 | Priority        | Marker                                                   | Action           |
 | --------------- | -------------------------------------------------------- | ---------------- |
@@ -120,18 +134,11 @@ gh api "repos/$OWNER/$REPO_NAME/pulls/$PR_NUMBER/reviews" --paginate | \
 
 ### Phase 2c: Handle Other Out-of-Scope Comments
 
-Run the out-of-scope detection script:
+Out-of-scope candidates come straight from the Phase 1 output:
 
-```bash
-# Detect out-of-scope comments
-bin/pr-comments-out-of-scope.sh <PR_NUMBER>
-```
-
-This script detects comments that:
-
-- Reference lines NOT in the PR diff
-- Are marked "outdated" by GitHub (GraphQL `isOutdated` flag)
-- Are general PR discussion comments
+- Threads marked `(outdated)` by the thread query (GraphQL `isOutdated` — the file changed since the comment was made)
+- Inline comments on lines NOT in the PR diff, and review-body "Outside diff range" sections
+- General PR discussion comments (top-level)
 
 **IMPORTANT**: Treat out-of-scope comments as **IN SCOPE** by default.
 
@@ -198,7 +205,7 @@ PR_NUMBER=<number>
 OWNER=$(gh repo view --json owner -q .owner.login)
 REPO_NAME=$(gh repo view --json name -q .name)
 CURRENT_USER=$(gh api user -q '.login')
-COMMENT_ID=<id-from-filter-script>
+COMMENT_ID=<id-from-Phase-1>   # a thread's head-comment databaseId
 
 gh api "/repos/$OWNER/$REPO_NAME/pulls/$PR_NUMBER/comments/$COMMENT_ID/replies" \
   -X POST \
@@ -207,9 +214,9 @@ gh api "/repos/$OWNER/$REPO_NAME/pulls/$PR_NUMBER/comments/$COMMENT_ID/replies" 
 *(Response by Claude on behalf of @$CURRENT_USER)*"
 ```
 
-### Phase 5: Resolve ALL Threads
+### Phase 5: Resolve Threads (Your Discretion)
 
-**Every thread must be resolved after responding.** Whether to resolve a thread yourself (vs. leaving it for the human reviewer to close) is your discretion — the owner ruling here is that either is fine. If you do resolve individual threads, prefer dispatching that per-thread work to a subagent where feasible, so per-thread context doesn't pile up in the main session. Use GraphQL to resolve:
+**Every thread must have a disposition after responding** — fixed (with a reply) or declined with the reason in a reply. Resolving every thread is not required; a thread you deliberately leave open goes in the hand-back report. Whether to resolve a thread yourself (vs. leaving it for the human reviewer to close) is your discretion — the owner ruling here is that either is fine. If you do resolve individual threads, prefer dispatching that per-thread work to a subagent where feasible, so per-thread context doesn't pile up in the main session. Use GraphQL to resolve:
 
 ```bash
 THREAD_ID="PRRT_kwDOK-xA485..."  # From GraphQL query
@@ -221,10 +228,10 @@ gh api graphql -f query='mutation {
 }'
 ```
 
-### Phase 6: Handle Threads That Can't Be Resolved
+### Phase 6: Handle Threads You Can't Disposition Yet
 
 1. **Query the comment author** asking for specific follow-up
-2. **Do NOT leave unresolved** - either resolve after responding, or ask for clarification
+2. **Do NOT leave a thread without a disposition** - reply with the fix or the reason, or ask for clarification
 3. If waiting for author response, mark as needing user input
 
 ### Phase 7: Post-Push Iteration Check (MANDATORY)
@@ -299,7 +306,7 @@ REPEAT:
   Phase 2: Triage (apply Phase 2a proportional assessment to each bot finding)
   Phase 3: Fix
   Phase 4: Respond
-  Phase 5: Resolve threads
+  Phase 5: Resolve threads (your discretion)
   Phase 6: Handle unclear threads
   Phase 7: Check for NEW comments after push (use Monitor to watch for new reviews/comments)
 
@@ -335,55 +342,67 @@ This is intentional because [reason]. The [thing] is designed to [explanation].
 
 ## Mandatory Pre-Completion Check
 
-**BLOCKING: You MUST run this script and show its output before declaring ANY PR ready:**
+**BLOCKING: You MUST run this thread query and show its output before declaring PR comments handled.** It classifies each review thread by disposition, not by resolution state (GraphQL `author.login` carries no `[bot]` suffix):
 
 ```bash
-bin/pr-comments-check.sh <PR_NUMBER>
+PR_NUMBER=${PR_NUMBER:-$(gh pr view --json number -q .number)}
+OWNER=$(gh repo view --json owner -q .owner.login)
+REPO=$(gh repo view --json name -q .name)
+ME=$(gh api user -q .login)   # the identity your thread replies post as
+gh api graphql --paginate -F owner="$OWNER" -F repo="$REPO" -F pr="$PR_NUMBER" -f query='
+  query($owner: String!, $repo: String!, $pr: Int!, $endCursor: String) {
+    repository(owner: $owner, name: $repo) {
+      pullRequest(number: $pr) {
+        reviewThreads(first: 100, after: $endCursor) {
+          pageInfo { hasNextPage endCursor }
+          nodes {
+            id isResolved isOutdated
+            comments(first: 100) { nodes { databaseId author { login } path body } }
+          }
+        }
+      }
+    }
+  }' | jq -rs --arg me "$ME" '
+  [.[].data.repository.pullRequest.reviewThreads.nodes[]] | .[]
+  | .comments.nodes[0] as $head
+  | ([.comments.nodes[1:][] | select(.author.login == $me)] | length) as $mine
+  | (if .isResolved then (if $mine > 0 then "RESOLVED" else "RESOLVED-NO-REPLY" end)
+     elif $mine > 0 then "OPEN-REPLIED"
+     else "NEEDS-DISPOSITION" end) as $class
+  | "\($class)\t\($head.databaseId)\t@\($head.author.login // "ghost")\t\($head.path)\(if .isOutdated then "\t(outdated)" else "" end)\t\(.id)"'
 ```
 
-This script:
+| Class | Meaning | Do |
+| ----- | ------- | -- |
+| `NEEDS-DISPOSITION` | Open, and you haven't replied | Handle it — you are NOT done |
+| `OPEN-REPLIED` | You replied; the thread is still open | Fine if your reply says *fixed (commit)* or *declined (reason)* — resolve at your discretion, or leave it open and **list it in the hand-back report** |
+| `RESOLVED-NO-REPLY` | Resolved, but you never replied | Confirm the fix is actually in; if you resolved it, add the reply |
+| `RESOLVED` | Replied and resolved | Nothing |
 
-- Returns exit code 0 if all comments addressed
-- Returns exit code 1 if ANY unaddressed comments exist
-- Shows status for each comment
-
-**If the script shows ANY unaddressed comments, you are NOT done.** Address each unaddressed comment:
+A reply from you is **necessary, not sufficient** — read it: it must say fixed (with the commit) or declined (with the reason). For each thread still needing a disposition:
 
 1. If actionable → Fix it and reply confirming the fix
 2. If out-of-scope → Reply explaining deferral (create issue if needed)
 3. If disagree → Reply with reasoning
 4. **NEVER ignore silently**
 
-**You must show the script output in your response** as proof that all comments are addressed. Example:
+Feedback outside threads (review-body findings, top-level bot or human comments from Phase 1) gets the same disposition in a top-level PR comment.
 
-```
-Checking PR #908 for unaddressed comments...
-
-=== Inline Code Review Comments ===
-Comment 123 by cursor[bot] - 1 reply(s) [OK]
-Comment 456 by coderabbitai[bot] - 1 reply(s) [OK]
-
-=== General PR Discussion Comments ===
-coderabbitai[bot]: <!-- summary -->...
-
-All inline review comments have been addressed
-```
-
-A PR is NOT ready until this script returns success.
+**You must show the query output in your response** as proof. PR comments are not handled while any thread is `NEEDS-DISPOSITION` or any `RESOLVED-NO-REPLY` is unconfirmed.
 
 ## Verification Checklist
 
 Before declaring PR comments handled:
 
-- [ ] Ran `bin/pr-comments-filter.sh <PR>` to identify actionable comments
+- [ ] Enumerated all five surfaces (Phase 1) — inline comments, review bodies, top-level comments, PR body, review threads — without filtering by author
 - [ ] **CRITICAL**: Extracted "Outside diff range" comments from review bodies (Phase 2b)
-- [ ] Ran `bin/pr-comments-out-of-scope.sh <PR>` to find other out-of-scope feedback
+- [ ] Checked Phase 1 output for other out-of-scope feedback (outdated threads, off-diff lines, top-level discussion)
 - [ ] Code fixes have been made and pushed
 - [ ] Each comment thread has a response posted
 - [ ] "Outside diff range" comments addressed with a general PR comment
 - [ ] **POST-PUSH CHECK**: Waited for CI/CD to complete, checked for NEW comments
 - [ ] **NO new comments found** after the post-push check (iterate if found)
-- [ ] **ALL threads have been resolved** (no unresolved threads remaining)
+- [ ] **Every thread has a disposition** — fixed (with a reply) or declined with the reason in a reply; threads deliberately left open are listed in the hand-back report
 - [ ] All responses include proper attribution
 - [ ] Out-of-scope comments have been either fixed OR have GitHub issues created
 - [ ] Every bot round this PR owed (§ Materiality, pr-shepherd skill) is confirmed clean at the SHA it ran against, from the bot's own artifact — not the trigger's ack

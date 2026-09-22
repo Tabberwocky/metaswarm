@@ -89,16 +89,7 @@ command -v bd && bd --version 2>/dev/null
 - If found: report path and version
 - If not found: `not installed -- knowledge priming and self-reflect require bd. Core orchestration works without it.`
 
-### 8. `gtg` CLI
-
-```bash
-command -v gtg && gtg --help >/dev/null 2>&1
-```
-
-- If found: report path
-- If not found: `not installed -- pr-shepherd will fall back to manual gh checks.`
-
-### 9. External Tools
+### 8. External Tools
 
 - Read `.metaswarm/external-tools.yaml` -- if absent: `not configured (optional)`
 - If present, check each enabled adapter's availability:
@@ -110,12 +101,12 @@ command -v gemini   # Gemini CLI
 
 Report per-tool: enabled (yes/no), status (available/not installed).
 
-### 10. Coverage Thresholds
+### 9. Coverage Thresholds
 
 - Read `.coverage-thresholds.json` -- if absent: `not configured`
 - If present, report threshold values (lines, branches, functions, statements) and enforcement command
 
-### 11. Node.js
+### 10. Node.js
 
 ```bash
 node --version 2>/dev/null
@@ -141,7 +132,6 @@ node --version 2>/dev/null
 | Legacy embedded plugin | Not detected |
 | BEADS plugin | Not separately installed |
 | bd CLI | Available (v0.5.2) |
-| gtg CLI | Available |
 | External tools | Codex: available, Gemini: not installed |
 | Coverage thresholds | 100% (all categories) |
 | Node.js | Available (v22.4.0) |
@@ -162,8 +152,7 @@ When issues are found:
 
 ### Recommendations
 1. Install `bd` CLI for knowledge priming and self-reflect
-2. Install `gtg` for the fastest `$pr-shepherd` readiness checks
-3. Configure external tools for cross-model review (`.metaswarm/external-tools.yaml`)
+2. Configure external tools for cross-model review (`.metaswarm/external-tools.yaml`)
 ```
 
 ---

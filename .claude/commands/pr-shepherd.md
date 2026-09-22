@@ -1,10 +1,10 @@
 ---
-description: Open a PR (if needed) and monitor it through to merge - handles CI failures, reviews, and thread resolution
+description: Open a PR (if needed) and monitor it up to the merge decision - handles CI failures, reviews, and thread dispositions, then hands back a merge-readiness verdict
 ---
 
 # PR Shepherd
 
-Open a PR (if one doesn't exist yet) and monitor it through merge, handling CI failures, review comments, and thread resolution automatically.
+Open a PR (if one doesn't exist yet) and monitor it up to the merge decision, handling CI failures, review comments, and thread dispositions automatically, then hand back a one-line merge-readiness verdict. It merges only on your explicit instruction.
 
 ## Usage
 
@@ -18,7 +18,7 @@ If no PR number is provided, uses the PR on the current branch — and if the br
 
 1. **Opens the PR if none exists** - Phase 0: push, create the PR, trigger initial reviews (skipped when a PR already exists)
 2. **Monitors CI/CD** - Watches for state changes via the `Monitor` tool (event-driven, not fixed-interval)
-3. **Monitors Reviews** - Watches for new comments and unresolved threads
+3. **Monitors Reviews** - Watches for new comments and threads still needing a disposition
 4. **Triggers the bots this PR warrants** - Manually, by default, within each bot's cap (none auto-review except Gemini, once at open). Re-triggers only a round that changed behavior. See the pr-shepherd skill § "Bot reviews — manual triggers, chosen within each bot's cap."
 5. **Auto-fixes simple issues** - Lint, prettier, type errors
 6. **Asks before complex fixes** - Presents options with pros/cons for approval
@@ -40,7 +40,7 @@ If no PR number is provided, uses the PR on the current branch — and if the br
 3. **Begin monitoring via the `Monitor` tool** (see the pr-shepherd skill for the canonical script):
    - Check CI status
    - Check for new review comments
-   - Check unresolved thread count
+   - Check review threads for any still needing a disposition
    - Take action based on state machine
 
 4. **Handle issues as they arise**:
@@ -49,7 +49,8 @@ If no PR number is provided, uses the PR on the current branch — and if the br
    - New comments -> invoke `handling-pr-comments` skill
 
 5. **Exit when done**:
-   - All CI green AND all threads resolved -> report success
+   - All CI green AND every thread has a disposition (fixed + reply, or declined + reason in a reply; any left open are listed) AND every owed bot round clean at head -> hand back the one-line verdict `Ready to merge (my assessment): YES — … / NO — …`
+   - Merges only if you explicitly authorized that merge in this session; never enables auto-merge unless asked
    - 4-hour timeout -> checkpoint with user
 
 ## Example
@@ -57,19 +58,19 @@ If no PR number is provided, uses the PR on the current branch — and if the br
 ```text
 /pr-shepherd 695
 
-> I'm using the pr-shepherd skill to monitor PR #695 through to merge.
+> I'm using the pr-shepherd skill to monitor PR #695 up to the merge decision.
 > I'll watch CI/CD, handle review comments, and fix issues as they arise.
 >
 > Current status:
 > - CI: Running (2/5 checks complete)
-> - Threads: 0 unresolved
+> - Threads: 0 needing a disposition
 >
 > Monitoring... (events arrive on state change)
 ```
 
 ## Notes
 
-- The agent stays active until the PR is ready to merge or you stop it
+- The agent stays active until it hands back the one-line verdict — after a first-party check that every owed bot round is clean; it never declares readiness without that — or you stop it. It doesn't merge unless you tell it to
 - All code changes use TDD process
 - Complex issues always get user approval before fixing
 - Uses `handling-pr-comments` skill for review comment handling

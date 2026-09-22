@@ -27,7 +27,7 @@ This agent leverages the existing `your-project:pr-shepherd` skill for the core 
 2. **Issue Fixing**: Auto-fix lint, type, and test failures
 3. **Review Handling**: Respond to and resolve review threads
 4. **BEADS Tracking**: Update task status as PR progresses
-5. **Completion**: Report when PR is ready to merge
+5. **Completion**: Hand back the one-line verdict (`Ready to merge (my assessment): YES — … / NO — …`) — never declare readiness without the first-party round check below
 
 ---
 
@@ -121,12 +121,12 @@ bd label add <task-id> review:approved
 
 ### Step 4: Completion
 
-Before closing, confirm — first-party, not from memory — that every bot round this PR **owed** (per the pr-shepherd skill's Bot reviews / Materiality rules) has actually run and is clean at the SHA it ran against. Then, when PR is ready to merge:
+Before closing, confirm — first-party, not from memory — that every bot round this PR **owed** (per the pr-shepherd skill's Bot reviews / Materiality rules) has actually run and is clean at the SHA it ran against. Then, when handing back a YES verdict:
 
 ```bash
-# All checks passing, all threads resolved, all owed bot rounds clean at head SHA
+# All checks passing, every thread has a disposition (fixed + reply, or declined + reason in a reply), all owed bot rounds clean at head SHA
 bd update <task-id> --status completed
-bd close <task-id> --reason "PR #${PR_NUMBER} ready to merge. All CI green, all threads resolved, all owed bot rounds clean at <sha>."
+bd close <task-id> --reason "PR #${PR_NUMBER} handed back — Ready to merge (my assessment): YES. CI green, every thread dispositioned, all owed bot rounds clean at <sha>."
 
 # Notify Issue Orchestrator
 # The epic can now proceed to human approval for merge
@@ -149,7 +149,7 @@ bd close <task-id> --reason "PR #${PR_NUMBER} ready to merge. All CI green, all 
 │                                   │                          │
 │                                   └──→ WAITING (if unclear)  │
 │                                                              │
-│   MONITORING ──→ ALL GREEN + RESOLVED ──→ DONE              │
+│   MONITORING ──→ ALL GREEN + DISPOSITIONED ──→ DONE         │
 │                                                              │
 └─────────────────────────────────────────────────────────────┘
 ```
@@ -212,7 +212,7 @@ bd label add <task-id> pr:needs-help
 Before marking complete, verify:
 
 - [ ] All CI checks are green
-- [ ] All review threads are resolved
+- [ ] Every review thread has a disposition (fixed + reply, or declined + reason in a reply); any left open are listed in the hand-back
 - [ ] No pending questions from reviewers
 - [ ] Local validation passes (`pnpm lint && pnpm typecheck && pnpm test`)
 - [ ] Every bot round this PR owed has run and is clean at the SHA it ran against (confirmed first-party, not recalled from earlier in the session)
@@ -269,8 +269,8 @@ bd label add <task-id> waiting:review
 # Reviews handled
 bd label remove <task-id> waiting:review
 
-# Ready to merge
-bd close <task-id> --reason "PR ready to merge"
+# Handed back with a YES verdict (after the first-party round check)
+bd close <task-id> --reason "PR handed back — Ready to merge (my assessment): YES"
 
 # Need human help
 bd label add <task-id> waiting:human
@@ -296,10 +296,10 @@ The PR Shepherd reports status via PR comments:
 - [x] CodeRabbit review addressed
 - [ ] Human review pending
 
-### Thread Resolution
+### Thread Dispositions
 
-- Resolved: X/Y threads
-- Pending: <list of unresolved>
+- Fixed (replied): X · Declined (reason in reply): Y
+- Left open deliberately: <list, or none>
 
 ### Bot Rounds
 
@@ -317,8 +317,7 @@ YES — every owed round clean at <sha>, CI green. / NO — <what's outstanding>
 
 - [ ] All CI checks passing
 - [ ] All review comments addressed
-- [ ] All threads resolved
-- [ ] No unresolved conversations
+- [ ] Every thread has a disposition (fixed + reply, or declined + reason in a reply); threads left open are listed in the hand-back
 - [ ] BEADS task updated throughout
-- [ ] Human notified when ready
-- [ ] PR merged successfully
+- [ ] One-line verdict handed back (`Ready to merge (my assessment): YES — … / NO — …`)
+- [ ] Merge left to the human (§ Handoff to Merge) unless the owner explicitly authorized this agent to merge; auto-merge never enabled unless asked

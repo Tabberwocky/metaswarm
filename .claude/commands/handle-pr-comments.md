@@ -21,7 +21,7 @@ This command helps systematically address PR review comments from automated tool
 1. All CI checks pass
 2. **EVERY** code review comment has been triaged per Proportional Response (likelihood × impact): correctness, security/privacy/data/money/regulatory, and human-authored comments are always addressed; trivial/nitpicks/out-of-scope are assessed proportionally — fixed, deferred (captured per the deferred-feedback protocol), or pushed back on with evidence
 3. **EVERY** comment thread has received an individual response
-4. All threads are marked as resolved (resolving is the agent's discretion — see § Thread Resolution Policy)
+4. **EVERY** thread has a disposition — fixed (with a reply) or declined with the reason in a reply — and any thread deliberately left open is listed in the hand-back report (resolving is the agent's discretion — see § Thread Resolution Policy)
 5. Any work > 1 day has a GitHub issue created
 6. No pending reviewer comments awaiting response
 7. ALL tests pass, there are no pre-existing issues or flaky tests - these are excuses. Fix the underlying issues, don't disable tests.
@@ -70,7 +70,7 @@ For EACH comment:
 ### Iteration Loop
 
 ```text
-REPEAT until (all_threads_resolved AND no_new_comments AND no_new_reviews_after_commit):
+REPEAT until (every_thread_has_a_disposition AND no_new_comments AND no_new_reviews_after_commit):
   1. Fetch ALL inline comments (including trivial, out-of-scope)
   1b. CHECK REVIEW BODIES for "Outside diff range" comments (Section 1c)
       - These are NOT threads - they're in the review body text
@@ -89,7 +89,7 @@ REPEAT until (all_threads_resolved AND no_new_comments AND no_new_reviews_after_
      - Check BOTH inline threads AND review bodies for new feedback
      - Check for NEW REVIEWS with "Actionable comments posted: X" (X > 0) — read the **full** review body for this check, not a truncated preview (see § 4)
   8. If new comments OR new reviews exist -> GO TO STEP 1
-  9. If no new comments/reviews AND all checks complete -> verify all threads resolved AND every owed bot round is clean at the current SHA, then complete
+  9. If no new comments/reviews AND all checks complete -> verify every thread has a disposition (any left open listed for the hand-back) AND every owed bot round is clean at the current SHA, then complete
 ```
 
 **THE #1 WORKFLOW FAILURE**: Stopping after responding without checking for new comments/reviews.
@@ -364,18 +364,22 @@ done
 
 ### 1b. Filter Actionable vs Non-Actionable Comments
 
-**CRITICAL**: Before processing comments, filter out non-actionable ones to avoid wasting time on confirmations and acknowledgments.
+**CRITICAL**: Before processing comments, enumerate every surface a reviewer can write to, then set aside the non-actionable ones (trigger acks, a bot's own walkthrough/summary, throttle/quota/error notices — those matter for round-counting, per the pr-shepherd skill § "Verifying a round", not for disposition). Section 1 covered inline comments and threads; these cover the rest:
 
 ```bash
-# Run the filter script
-bin/pr-comments-filter.sh $PR_NUMBER
+# Review objects — FULL bodies, never truncated ("Actionable comments posted", "Outside diff range", and <details> nit blocks live here)
+gh api "repos/$OWNER/$REPO_NAME/pulls/$PR_NUMBER/reviews" --paginate \
+  --jq '.[] | select((.body // "") != "") | {id, user: .user.login, state, commit_id: .commit_id[0:7], submitted_at, body}'
+
+# Top-level comments — Codex clean-pass notes, CodeRabbit's summary (edited in place: read updated_at), notices, human discussion
+gh api "repos/$OWNER/$REPO_NAME/issues/$PR_NUMBER/comments" --paginate \
+  --jq '.[] | {id, user: .user.login, created_at, updated_at, body}'
+
+# PR body — Cursor Bugbot writes its summary here (<!-- CURSOR_SUMMARY -->)
+gh pr view "$PR_NUMBER" --json body -q .body
 ```
 
-This script:
-
-- Filters out non-actionable comments (confirmations, acknowledgments, fingerprinting)
-- Categorizes actionable comments by priority
-- Shows comment IDs and details for processing
+**Don't filter by author while enumerating.** Classify afterward: the review bots are `coderabbitai[bot]`, `chatgpt-codex-connector[bot]`, `cursor[bot]`, `copilot-pull-request-reviewer[bot]` (its inline comments are authored by `Copilot`), and `gemini-code-assist[bot]` — REST logins carry `[bot]`; GraphQL and `gh pr view --json` strip it. Anyone else is a human: always address. A reply existing is not a disposition — a thread is handled when it's fixed (with a reply) or declined with the reason in a reply.
 
 **Priority levels:**
 
@@ -386,6 +390,8 @@ This script:
 | **MEDIUM**   | `_Minor_` or `_Refactor suggestion_ \| _Major_`     | Fix              |
 | **LOW**      | `_Trivial_` / `_Nitpick_`                           | **Assess proportionally** |
 | **HUMAN**    | Non-bot comments                                    | Always process   |
+
+The markers above are CodeRabbit's; other bots mark severity in their own formats — read the content and triage it the same way.
 
 > **Note**: Every comment is triaged per Proportional Response (likelihood × impact). Correctness, security/privacy/data/money/regulatory, and human-authored comments are always addressed; trivial/nitpicks are assessed by risk — fixed, deferred (captured per the deferred-feedback protocol), or pushed back on with evidence. See Complete PR Lifecycle Protocol and Proportional Response Triage.
 
@@ -486,8 +492,8 @@ rm -f /tmp/pr_${PR_NUMBER}_reviews_$$.json
 2. **Make your fixes**: Code changes, commit, push
 3. **REFRESH comment IDs**: Re-fetch CURRENT comments (IDs may have changed after your commit!)
 4. **Post responses**: Use CURRENT comment IDs to post replies
-5. **WAIT for reviewer**: Do NOT resolve threads - let reviewer verify your fix
-6. **Resolve only when**: Reviewer approves OR you're declining the suggestion
+5. **Resolve at your discretion** (§ Thread Resolution Policy): right after your reply, or leave it open for the reviewer to verify — either is fine
+6. **When declining**: the reason goes in the reply; resolving right away is fine
 
 **Correct API Pattern**: Use GitHub REST API for posting comment replies:
 
@@ -534,7 +540,7 @@ Then re-check for new comments using the workflow in Section 1.
 
 1. **Be Proportional**: Use likelihood × impact triage (see Proportional Response Triage) — fix correctness, security, and human comments unconditionally; assess bot nitpicks and out-of-scope suggestions by risk rather than fixing everything blindly
 2. **Be Complete**: Address all parts of multi-part suggestions (don't cherry-pick)
-3. **Be Iterative**: Follow the Iteration Loop - don't declare complete until ALL threads resolved
+3. **Be Iterative**: Follow the Iteration Loop - don't declare complete until EVERY thread has a disposition (fixed + reply, or declined + reason in a reply)
 4. **Be Responsive**: Reply to **EVERY** comment thread individually (not batch responses)
 5. **Be Specific**: Reference exact commits, files, and line numbers
 6. **Be Professional**: Thank reviewers for catching important issues
@@ -549,7 +555,7 @@ A PR is **NOT ready for merge** until:
 1. All CI checks pass
 2. **EVERY** comment has been triaged per Proportional Response: correctness, security/privacy/data/money/regulatory, and human-authored comments addressed; trivial/nitpicks/out-of-scope assessed proportionally — fixed, deferred (captured per the deferred-feedback protocol), or pushed back on with evidence
 3. **EVERY** thread has an individual response
-4. All threads are marked resolved (resolving is the agent's discretion — either after reviewer approval or right after responding; see § Thread Resolution Policy)
+4. **EVERY** thread has a disposition — fixed (with a reply) or declined with the reason in a reply — and any thread deliberately left open is listed in the hand-back report; check with the thread query in the pr-shepherd skill § "Reading PR state" (resolving is the agent's discretion; see § Thread Resolution Policy)
 5. GitHub issues created for any deferred work (> 1 day)
 6. No pending reviewer comments awaiting response
 7. **No new reviews after last commit with actionable items**

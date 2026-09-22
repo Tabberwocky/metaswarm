@@ -373,24 +373,9 @@ GitHub Issue #123 (agent-ready label)
 └─────────────────────────────────────┘
 ```
 
-### GTG (Good-To-Go) Merge Gate
+### PR Readiness Check (plain `gh`)
 
-GTG is the final merge gate. It consolidates CI status, comment classification, and thread resolution into a single deterministic check. Agents should use it as the primary readiness signal:
-
-```bash
-# Check if PR is ready to merge
-gtg <PR_NUMBER> --format json \
-  --exclude-checks "Merge Ready (gtg)" \
-  --exclude-checks "CodeRabbit" \
-  --exclude-checks "Cursor Bugbot" \
-  --exclude-checks "claude"
-```
-
-**Statuses**: `READY` (merge), `ACTION_REQUIRED` (fix comments), `UNRESOLVED_THREADS` (resolve threads), `CI_FAILING` (fix CI). The `action_items` array tells agents exactly what to fix.
-
-**GTG reports, agents act**: GTG does not resolve threads or fix code. After addressing feedback, agents must resolve threads themselves via the GraphQL mutation documented in `handle-pr-comments.md` (Section 3: Resolving Review Threads). GTG will report `READY` on the next check once threads are resolved.
-
-If the CI check is stale: `gh workflow run gtg.yml -f pr_number=<PR_NUMBER>`
+Read CI and review-thread state straight from `gh` — see the pr-shepherd skill § "Reading PR state" for the exact commands. In short: classify CI from `gh pr checks <PR_NUMBER> --json name,state,bucket` by each check's `bucket` (with `--json` the exit code is 0 for passing, failing, and pending alike; non-zero means no checks or an error), and classify every review thread by disposition with the GraphQL `reviewThreads` query (`isResolved`, `isOutdated`, head comment). Neither signal says whether a bot reviewed the current SHA — that is verified separately, per the pr-shepherd skill § "Bot reviews".
 
 ### Automatic PR Review Cycles
 
@@ -400,7 +385,7 @@ When a PR is created via `bin/create-pr-with-shepherd.sh`, the script outputs in
 2. **Start pr-shepherd** using `/pr-shepherd <pr-number>`
 3. **PR Shepherd monitors**: CI status, review comments, thread resolution
 4. **Auto-fixes**: Lint, type errors, test failures in your code
-5. **Reports when ready**: All CI green, all threads resolved
+5. **Hands back a verdict**: CI green, every thread has a disposition, every owed bot round clean at head → the one-line `Ready to merge (my assessment): YES — … / NO — …`; it merges only on the owner's explicit instruction
 
 For manually-created PRs, invoke `/pr-shepherd <pr-number>` to start the monitoring cycle.
 

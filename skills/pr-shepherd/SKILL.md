@@ -1,11 +1,11 @@
 ---
 name: pr-shepherd
-description: Monitor a PR through to merge — handle CI failures, review comments, and thread resolution automatically until all checks pass
+description: Monitor a PR up to the merge decision — handle CI failures, review comments, and thread dispositions, then hand back a one-line merge-readiness verdict
 ---
 
 # pr-shepherd
 
-Use when a PR has been created and needs to be monitored through to merge - handles CI failures, review comments, and thread resolution automatically until all checks pass and all threads are resolved.
+Use when a PR has been created and needs to be monitored up to the merge decision - handles CI failures, review comments, and thread dispositions automatically until all checks pass and every review thread has a disposition, then hands back the one-line verdict `Ready to merge (my assessment): YES — … / NO — …`. It merges only if the owner explicitly authorized that merge in this session (§ Exit Conditions).
 
 **IMPORTANT**: This skill is designed for the **agent working in a worktree**, NOT the orchestrator. The agent handles its own PR monitoring so the orchestrator remains free for other work.
 
@@ -46,7 +46,7 @@ The pr-shepherd skill will:
   - Auto-fix lint, type, and test issues
   - Handle review comments
   - Resolve threads after addressing feedback
-  - Report when PR is ready to merge
+  - Hand back the one-line merge-readiness verdict
 
 To manually invoke shepherd later:
   /pr-shepherd 123
@@ -56,7 +56,7 @@ When you see this output, **immediately invoke the pr-shepherd skill** with the 
 
 ## Announce at Start
 
-"I'm using the pr-shepherd skill to monitor this PR through to merge. I'll watch CI/CD, handle review comments, and fix issues as they arise."
+"I'm using the pr-shepherd skill to monitor this PR up to the merge decision. I'll watch CI/CD, handle review comments, fix issues as they arise, and hand back a one-line merge-readiness verdict."
 
 ## For Orchestrators: Spawning Agents with PR Shepherding
 
@@ -68,10 +68,10 @@ Work in worktree at /path/to/worktree on branch feature/xyz.
 Task: [describe the implementation task]
 
 After creating the PR:
-1. Use the pr-shepherd skill to monitor it through to merge
+1. Use the pr-shepherd skill to monitor it up to the merge decision
 2. Handle CI failures and review comments autonomously
 3. Only escalate to orchestrator for complex issues requiring user input
-4. Report back when PR is ready to merge or if blocked
+4. Report back with the one-line verdict (`Ready to merge (my assessment): YES — … / NO — …`), or if blocked — don't merge unless I explicitly authorize that merge
 
 Run in background so I can continue other work.
 ```
@@ -92,7 +92,7 @@ MONITORING → FIXING → MONITORING → WAITING_FOR_USER → FIXING → MONITOR
 | `FIXING`           | Fix issues using TDD, run local validation  | Local validation passes OR need user guidance  |
 | `HANDLING_REVIEWS` | Invoke `handling-pr-comments` skill         | Comments handled OR need user input            |
 | `WAITING_FOR_USER` | Present options, wait for user decision     | User responds                                  |
-| `DONE`             | All CI green + all threads resolved         | Exit successfully                              |
+| `DONE`             | CI green + every thread has a disposition + every owed bot round clean at head | Hand back the one-line verdict (no merge unless explicitly authorized) |
 
 ## Bot reviews — manual triggers, chosen within each bot's cap
 
@@ -270,85 +270,76 @@ until <artifact-check-for-this-bot>; do sleep 60; done; echo "landed"
 
 When a round triggers several bots, one until-loop checks all of them — a tested multi-bot template (CodeRabbit, Codex, Gemini, Copilot, Bugbot) is in `~/.claude/skills/gh-pr-feedback/SKILL.md` Step 9b. Run the check once by hand against an existing artifact first to prove it can fire, then arm it. It emits one line and exits when the artifact lands — zero tokens while waiting, exactly one wake. One monitor per awaited round; don't stack them. Never arm a watch on an idle, already-converged PR.
 
-Run GTG inside a `Monitor` watch script as the **single source of truth** for PR *CI/thread* status (not bot-review readiness, which is verified separately per § "Bot reviews"):
+### Reading PR state — plain `gh`
 
-### Primary Check: GTG (Good-To-Go)
+When the CI monitor fires (or whenever you need a fresh read), take CI and thread state straight from `gh`. These are the *CI/thread* signals only — bot-review readiness is verified separately per § "Bot reviews".
 
-GTG consolidates CI status, comment classification, and thread resolution into one call. Use it instead of separate API queries.
-
-```bash
-# Primary readiness check — structured JSON output
-GTG_RESULT=$(gtg $PR_NUMBER --repo "$OWNER/$REPO" --format json \
-  --exclude-checks "Merge Ready (gtg)" \
-  --exclude-checks "CodeRabbit" \
-  --exclude-checks "Cursor Bugbot" \
-  --exclude-checks "claude" 2>&1)
-
-STATUS=$(echo "$GTG_RESULT" | jq -r '.status')
-ACTION_ITEMS=$(echo "$GTG_RESULT" | jq -r '.action_items[]?' 2>/dev/null)
-CI_STATE=$(echo "$GTG_RESULT" | jq -r '.ci_status.state')
-```
-
-**GTG statuses:**
-
-| Status               | Meaning                            | Agent Action                              |
-| -------------------- | ---------------------------------- | ----------------------------------------- |
-| `READY`              | All CI green, all threads resolved | → DONE                                    |
-| `ACTION_REQUIRED`    | Actionable comments need fixes     | → HANDLING_REVIEWS (use `action_items`)   |
-| `UNRESOLVED_THREADS` | Review threads still open          | → HANDLING_REVIEWS                        |
-| `CI_FAILING`         | One or more CI checks failing      | → FIXING                                  |
-| `ERROR`              | Couldn't fetch PR data             | Retry on the next Monitor event; escalate after 3 consecutive ERROR events |
-
-**GTG reports, agents act**: GTG does not resolve threads or fix code — it only tells you what's blocking. After addressing feedback, you must resolve threads yourself using the GraphQL mutation in `handle-pr-comments.md` (Section 3). GTG will report `READY` on the next Monitor event once threads are resolved.
-
-### Evaluate State Transitions
-
-```text
-if STATUS == "READY":
-  → DONE
-
-if STATUS == "CI_FAILING":
-  → Parse action_items for specific failures
-  → if is_simple_failure(failure): FIXING
-  → else: WAITING_FOR_USER
-
-if STATUS == "ACTION_REQUIRED" or STATUS == "UNRESOLVED_THREADS":
-  → HANDLING_REVIEWS (action_items tells you exactly what to fix)
-
-if STATUS == "ERROR":
-  → Retry, then escalate
-```
-
-### Fallback: Manual Checks
-
-If GTG is unavailable (e.g., not installed in environment), fall back to manual queries:
+**CI** — classify from each check's `bucket` (`pass`, `fail`, `pending`, `skipping`, `cancel`), not from the exit code. With `--json`, `gh pr checks` exits **0 whether checks pass, fail, or are still pending** (verified on gh 2.83.1); its documented exit codes (1 = failed, **8 = pending**) apply only to the plain-text form. A non-zero exit with `--json` means no checks were reported, or an error — never mask it with `|| true`:
 
 ```bash
-# CI status
-FAILED_CHECKS=$(gh pr checks $PR_NUMBER --json name,conclusion --jq '[.[] | select(.conclusion == "FAILURE")] | length')
+PR_NUMBER=${PR_NUMBER:-$(gh pr view --json number -q .number)}
+ERR=$(mktemp)
+CHECKS=$(gh pr checks "$PR_NUMBER" --json name,state,bucket 2>"$ERR"); CI_RC=$?
+if [ "$CI_RC" -ne 0 ]; then
+  if grep -q "no checks reported" "$ERR"; then CI_STATE=NONE   # absent, not pending
+  else CI_STATE=ERROR; cat "$ERR"; fi
+elif echo "$CHECKS" | jq -e 'any(.[]; .bucket == "fail" or .bucket == "cancel")' >/dev/null; then CI_STATE=FAILING
+elif echo "$CHECKS" | jq -e 'any(.[]; .bucket == "pending")' >/dev/null; then CI_STATE=PENDING
+else CI_STATE=GREEN
+fi
+rm -f "$ERR"
+# Failing check names: echo "$CHECKS" | jq -r '.[] | select(.bucket == "fail" or .bucket == "cancel") | .name'
+```
 
-# Unresolved threads
-UNRESOLVED=$(gh api graphql -f query='
-  query($owner: String!, $repo: String!, $pr: Int!) {
+**Review threads** — one row per thread, classified by disposition rather than by resolution state. The disposition rule: every thread is either **fixed (with a reply)** or **declined with the reason in a reply**; resolving it is your discretion. GraphQL `author.login` carries no `[bot]` suffix (REST `user.login` does):
+
+```bash
+PR_NUMBER=${PR_NUMBER:-$(gh pr view --json number -q .number)}
+OWNER=$(gh repo view --json owner -q .owner.login)
+REPO=$(gh repo view --json name -q .name)
+ME=$(gh api user -q .login)   # the identity your thread replies post as
+gh api graphql --paginate -F owner="$OWNER" -F repo="$REPO" -F pr="$PR_NUMBER" -f query='
+  query($owner: String!, $repo: String!, $pr: Int!, $endCursor: String) {
     repository(owner: $owner, name: $repo) {
       pullRequest(number: $pr) {
-        reviewThreads(first: 100) {
-          nodes { isResolved }
+        reviewThreads(first: 100, after: $endCursor) {
+          pageInfo { hasNextPage endCursor }
+          nodes {
+            id isResolved isOutdated
+            comments(first: 100) { nodes { databaseId author { login } path body } }
+          }
         }
       }
     }
-  }
-' -f owner="$OWNER" -f repo="$REPO" -F pr="$PR_NUMBER" \
-  --jq '[.data.repository.pullRequest.reviewThreads.nodes[] | select(.isResolved == false)] | length')
+  }' | jq -rs --arg me "$ME" '
+  [.[].data.repository.pullRequest.reviewThreads.nodes[]] | .[]
+  | .comments.nodes[0] as $head
+  | ([.comments.nodes[1:][] | select(.author.login == $me)] | length) as $mine
+  | (if .isResolved then (if $mine > 0 then "RESOLVED" else "RESOLVED-NO-REPLY" end)
+     elif $mine > 0 then "OPEN-REPLIED"
+     else "NEEDS-DISPOSITION" end) as $class
+  | "\($class)\t\($head.databaseId)\t@\($head.author.login // "ghost")\t\($head.path)\(if .isOutdated then "\t(outdated)" else "" end)\t\(.id)"'
 ```
 
-### Re-triggering GTG CI Check
+| Class | Meaning | Do |
+| ----- | ------- | -- |
+| `NEEDS-DISPOSITION` | Open, and you haven't replied | Handle it (→ HANDLING_REVIEWS) |
+| `OPEN-REPLIED` | You replied; the thread is still open | Fine if your reply says *fixed (commit)* or *declined (reason)* — resolve at your discretion, or leave it open and **list it in the hand-back report** |
+| `RESOLVED-NO-REPLY` | Resolved, but you never replied (a reviewer or bot closed it, or it was resolved silently) | Confirm the fix is actually in; if you resolved it, add the reply |
+| `RESOLVED` | Replied and resolved | Nothing |
 
-When threads are resolved but the `Merge Ready (gtg)` GitHub Actions check is stale:
+A reply from you is **necessary, not sufficient** — read it: it must say fixed (with the commit) or declined (with the reason). `(outdated)` threads still need a disposition; unresolved threads carry forward onto every new head. Feedback that isn't in a thread — review bodies ("Outside diff range", Codex/Gemini/Copilot review summaries), top-level comments, Bugbot's PR-body summary — is enumerated by the `handling-pr-comments` skill's Phase 1.
 
-```bash
-gh workflow run gtg.yml -f pr_number=$PR_NUMBER
-```
+### Evaluate State Transitions
+
+| Signal | Agent action |
+| ------ | ------------ |
+| `CI_STATE=FAILING` | Read the failing checks' logs → FIXING if `is_simple_failure`, else WAITING_FOR_USER |
+| `CI_STATE=PENDING` | Stay in MONITORING (re-arm the CI monitor) |
+| `CI_STATE=ERROR` | Retry on the next Monitor event; escalate after 3 consecutive errors |
+| `CI_STATE=NONE` | No checks on this PR — absent, not pending. Not a pass: say so in the hand-back |
+| Any `NEEDS-DISPOSITION` thread, or new review/comment feedback since your last pass | → HANDLING_REVIEWS |
+| `CI_STATE=GREEN` (or `NONE`, stated), zero `NEEDS-DISPOSITION`, every `RESOLVED-NO-REPLY` confirmed, every owed bot round clean at head | → DONE (hand back the verdict — § Exit Conditions) |
 
 ## Phase 3: Fixing Issues
 
@@ -415,10 +406,10 @@ When new review comments are detected:
 1. Invoke the `handling-pr-comments` skill
 2. That skill handles categorization, fixes, responses, and thread resolution — including the **materiality-gated re-trigger** of whichever bots this round warrants after the round's fixes are pushed (see § "Bot reviews — manual triggers, chosen within each bot's cap"; only a behavior-changing round owes a re-trigger at all)
 3. **CRITICAL: The handling-pr-comments skill includes an iteration loop**
-4. **ALL threads must be resolved** before returning to MONITORING
-5. If a thread cannot be resolved (needs clarification from reviewer), query the comment author asking for follow-up
+4. **Every thread must have a disposition** — fixed (with a reply) or declined with the reason in a reply — before returning to MONITORING. Resolving it is your discretion; a thread you deliberately leave open goes in the hand-back report
+5. If a thread can't be given a disposition yet (needs clarification from reviewer), query the comment author asking for follow-up
 6. Return to MONITORING only when:
-   - All threads are resolved, AND
+   - Every thread has a disposition (see the thread classes in § Reading PR state), AND
    - Post-push verification confirms NO new comments appeared
 
 ### Iteration Enforcement
@@ -444,7 +435,7 @@ Reviewers may leave comments on code outside the PR diff. The `handling-pr-comme
 - Use **ultrathink** to evaluate if fixes are quick (< 30 min, < 3 files)
 - If simple: fix immediately and note it was outside original scope
 - If complex: create a GitHub issue and link it in the thread response
-- **Always respond and resolve** - never leave out-of-scope threads hanging
+- **Always respond** - never leave an out-of-scope thread without a disposition (resolving it is your discretion)
 
 ## Phase 5: Waiting for User
 
@@ -519,16 +510,17 @@ What would you like to do? (Or describe a different approach)
 
 ## Exit Conditions
 
-### Success (DONE)
+### Success (DONE) — hand back the verdict
 
-Exit successfully when ALL are true:
+Hand back when ALL are true:
 
-- All CI checks passing
+- All CI checks passing (or none reported — say so; that is absent, not green)
 - **Every single** code review comment has been addressed (fix or explanation -- NONE ignored)
-- All review threads resolved (zero unresolved)
+- **Every review thread has a disposition** — fixed (with a reply) or declined with the reason in a reply — and any thread deliberately left open is listed in the hand-back report. Resolving every thread is **not** required; resolving is your discretion
 - No pending questions
 - Every bot round this PR **owed** (§ "Bot reviews" — Materiality) has actually run and is clean **at the SHA it ran against**, confirmed first-party by reading the artifact, not by recalling an earlier check
-- PR squash-merged to main (not just "ready to merge" -- actually merged)
+
+**The skill ends at the hand-back — it does not merge.** Merge only if the owner explicitly authorized that specific merge in this session; never enable auto-merge unless explicitly asked. Without that authorization the verdict line is the finish line, and Phase 7 runs only if a merge actually happens.
 
 **Before handing back an open PR, don't call it ready on stale evidence.** "I handled this earlier" is not confirmation — re-check the live artifact for each owed round right before you report. Platform signals (`mergeable`, `mergeStateStatus`) never substitute for this; they report conflicts and required checks only.
 
@@ -538,7 +530,7 @@ Report, with the verdict stated explicitly in one line — never leave it implie
 **PR #[number] Status**
 
 - CI: All checks passing
-- Reviews: All threads resolved
+- Threads: [N] total — [X] fixed (replied), [Y] declined (reason in reply); left open: [list with links, or none]
 - Bot rounds: [which ran, at which SHA, clean; which owed round was skipped and why, if any]
 - Commits: [N] total ([M] fix commits)
 
@@ -547,29 +539,9 @@ Ready to merge (my assessment): YES — every owed round clean at <sha>, CI gree
 
 If a round is technically owed but not warranted (§ "Bot reviews" — Materiality / the three-round cap), the verdict is still **YES**, with one line naming the skipped round and why. Reserve **NO** for a substantively outstanding item — a round in flight, an unfixed finding, red CI, real un-reviewed risk — never for a process technicality. A round genuinely in flight is not a hand-back moment: stay quiet with the monitor armed (§ "Awaiting a bot's review round") and report once it lands, rather than handing back an interim "waiting" update with a verdict attached.
 
-### Post-Completion RAM Cleanup
-
-After the PR is merged and knowledge extraction tasks are created, invoke automatic RAM cleanup to free resources:
-
-```text
-/auto-ram-cleanup
-```
-
-**Why**: Development processes (test runners, build watchers, language servers) accumulate during PR work. Cleaning up after merge frees memory for the next task.
-
-**What stays running**:
-
-- Docker containers (needed for database/services)
-- Essential IDE processes
-
-**What gets cleaned**:
-
-- Orphaned test runners (vitest, jest)
-- Build watchers no longer needed
-- Duplicate language server instances
-- Other development tool cruft
-
 ## Phase 7: Post-Merge Verification & Fallback Knowledge Extraction
+
+**Runs only if a merge actually happened** — by the owner, or by you on the owner's explicit instruction in this session. If the skill ended at the hand-back with the PR still open, skip this phase.
 
 **Primary path**: Self-reflect should have already run pre-PR (see orchestrated-execution section 8.5), with knowledge base changes committed as part of the PR. This phase verifies that happened and handles the fallback case.
 
@@ -689,49 +661,33 @@ To resume: `/pr-shepherd [number]`
 
 ## Mandatory Pre-Completion Check
 
-**BLOCKING: You MUST run this script and show its output before declaring ANY PR ready:**
+**BLOCKING: You MUST run the thread query (§ Reading PR state → Review threads) and show its output before handing back ANY PR verdict.** Also re-run the `handling-pr-comments` Phase 1 enumeration for feedback outside threads (review bodies, top-level comments, the PR body).
 
-```bash
-bin/pr-comments-check.sh <PR_NUMBER>
-```
+**If any thread is `NEEDS-DISPOSITION`, or any `RESOLVED-NO-REPLY` is unconfirmed, you are NOT done.** For each:
 
-This script:
-
-- Returns exit code 0 if all comments addressed
-- Returns exit code 1 if ANY unaddressed comments exist
-- Shows status for each comment
-
-**If the script shows ANY unaddressed comments, you are NOT done.** Address each unaddressed comment:
-
-For EACH top-level comment (where `in_reply_to_id` is null) without a reply:
-
-1. If actionable → Fix it and reply confirming the fix
+1. If actionable → Fix it and reply confirming the fix (with the commit)
 2. If out-of-scope → Reply explaining deferral (create issue if needed)
 3. If disagree → Reply with reasoning
 4. **NEVER ignore silently**
 
-A PR is NOT ready until every top-level comment has been addressed with a reply.
+Feedback outside threads (review-body findings, top-level bot or human comments) gets the same disposition in a top-level PR comment. A thread you deliberately leave open (`OPEN-REPLIED`) is fine — list it in the hand-back report.
 
 ## Verification Checklist
 
 Before exiting DONE state:
 
-- [ ] All CI checks are green
-- [ ] All review threads are resolved
+- [ ] All CI checks are green (or none reported — stated)
+- [ ] Every review thread has a disposition (fixed + reply, or declined + reason in a reply); threads left open are listed in the report
 - [ ] No pending user questions
-- [ ] Final status reported to user
+- [ ] Final status reported to user, with the one-line `Ready to merge (my assessment): YES — … / NO — …` verdict
+- [ ] No merge performed unless the owner explicitly authorized it in this session; auto-merge not enabled unless asked
 
-After PR is merged (Phase 7):
+Only if a merge actually happened (Phase 7):
 
 - [ ] Created task for knowledge curation
 - [ ] Added task as blocker to epic (if applicable)
 - [ ] Reported curation task ID to user
 - [ ] Verified `/self-reflect` ran pre-PR (if not, run it now as fallback)
-
-After all post-merge tasks complete:
-
-- [ ] Ran `/auto-ram-cleanup` to free development resources
-- [ ] Confirmed Docker containers still running (if needed)
 
 ## Common Mistakes
 

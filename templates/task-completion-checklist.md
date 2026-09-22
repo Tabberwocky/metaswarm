@@ -99,24 +99,15 @@ If you added new services, hooks, middleware, components, or routes:
 
 ### 6. PR Review Comments (For PR-Related Tasks)
 
-When working on a PR or declaring a PR ready for merge:
+When working on a PR or handing back a PR verdict:
 
-**BLOCKING: Run the PR comments check script and show output as proof:**
+**BLOCKING: Run the review-thread disposition check and show its output as proof.** The query is in the metaswarm `handling-pr-comments` skill § Mandatory Pre-Completion Check — plain `gh` + GraphQL, no repo-local script.
 
-```bash
-bin/pr-comments-check.sh <PR_NUMBER>
-```
-
-- [ ] Script returns exit code 0 (all inline comments addressed)
-- [ ] Script output shown in your response as proof
+- [ ] No thread is `NEEDS-DISPOSITION`: every review thread is fixed (with a reply) or declined with the reason in a reply
+- [ ] Query output shown in your response as proof
+- [ ] Threads deliberately left open are listed in the hand-back report
 - [ ] No comment silently ignored -- each must have: a fix, a deferral explanation, or a reasoned disagreement
-
-**Additional PR comment scripts (use when needed):**
-
-```bash
-# Filter actionable vs non-actionable comments by priority
-bin/pr-comments-filter.sh <PR_NUMBER>
-```
+- [ ] Feedback outside threads (review bodies, top-level comments -- any bot or human) enumerated per that skill's Phase 1 and answered in a top-level PR comment
 
 - [ ] After pushing fixes, wait 2 min and re-check for new automated reviewer comments
 
@@ -152,9 +143,9 @@ When working as a task agent in a worktree (spawned by an orchestrator), you own
 - [ ] Create PR: `gh pr create --title "..." --body "..."`
 - [ ] Shepherd PR through CI (monitor checks, fix failures)
 - [ ] Address **every single** code review comment (fix code or reply with explanation)
-- [ ] Resolve **all** review threads via GraphQL
-- [ ] Squash merge when ready: `gh pr merge <number> --squash --auto`
-- [ ] Report final merge status back to orchestrator
+- [ ] Give **every** review thread a disposition -- fixed (with a reply) or declined with the reason in a reply (resolving is your discretion)
+- [ ] Hand back with the one-line verdict `Ready to merge (my assessment): YES — … / NO — …`; merge only on the owner's explicit instruction, and never enable auto-merge unless asked
+- [ ] Report the verdict (and merge status, if the owner had you merge) back to orchestrator
 
 **The orchestrator will NOT start the next phase until your PR is merged to main.**
 

@@ -273,7 +273,7 @@ Write them to `.beads/knowledge/` in the project. Skip any that already exist.
 #### Shell Utilities
 
 Read each file from `./bin/`:
-- `estimate-cost.sh`, `external-tools-verify.sh`, `pr-comments-check.sh`, `pr-comments-filter.sh`
+- `estimate-cost.sh`, `external-tools-verify.sh`
 
 Write them to `bin/` in the project. Make executable with `chmod +x`. Skip any that already exist.
 

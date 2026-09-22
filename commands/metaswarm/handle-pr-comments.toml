@@ -1,7 +1,7 @@
 description = "Handle PR review comments with the full resolution workflow"
-prompt = """Invoke the metaswarm handle-pr-comments skill. The user wants to address PR review comments.
+prompt = """Invoke the metaswarm handling-pr-comments skill. The user wants to address PR review comments.
 
 Arguments provided by the user: {{args}}
 
-Fetch inline comments and review bodies, handle "outside diff range" comments, resolve threads, iterate until all comments are addressed.
+Fetch inline comments and review bodies, handle "outside diff range" comments, and give every review thread a disposition (fixed with a reply, or declined with the reason in a reply; resolving is at your discretion). After a fix round that changed behavior, re-trigger only the bots that round owes, then re-check for new comments; repeat until none remain.
 """

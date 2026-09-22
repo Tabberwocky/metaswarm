@@ -1,7 +1,7 @@
-description = "Monitor a PR through CI, review comments, and merge"
-prompt = """Invoke the metaswarm pr-shepherd skill. The user wants to shepherd a PR to merge.
+description = "Monitor a PR through CI and review comments up to the merge decision"
+prompt = """Invoke the metaswarm pr-shepherd skill. The user wants to shepherd a PR up to the merge decision.
 
 Arguments provided by the user: {{args}}
 
-Monitor CI status, handle review comments, resolve threads, report when ready to merge.
+Monitor CI status, handle review comments, give every review thread a disposition (fixed with a reply, or declined with the reason in a reply), then hand back the one-line verdict "Ready to merge (my assessment): YES — … / NO — …". Merge only on the user's explicit instruction; never enable auto-merge unless asked.
 """

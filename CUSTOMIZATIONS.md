@@ -109,6 +109,8 @@ Added a shared portable blocker/severity contract (`rubrics/reviewer-calibration
 
 When a repo already has BEADS docs, config, sync flow, or storage conventions, those repo-local/custom rules win unconditionally. Metaswarm must not run its stock BEADS setup flow as a replacement, copy its BEADS templates into a repo with a custom setup, assume `.beads/issues.jsonl` or `bd sync`/`bd dolt push` as defaults, or frame its BEADS defaults as authoritative. Every relevant entrypoint now includes an explicit check: read repo-local BEADS guidance first via `bd where --json` before backend-specific operations.
 
+> **Refined by § M (`0.12.0-fork.7`):** the beads templates now show `bd update --claim` and `bd dolt push`, but `bd dolt push` only as a conditional ("if a shared Dolt remote is configured"), under the same "examples only" caveat — still not a default.
+
 **Upstreamable: no** — this is an environment-specific policy for repos that use a custom BEADS setup.
 
 ---
@@ -238,13 +240,35 @@ Realigns all PR-bot invocation guidance to the canonical portable policy at `~/C
 
 ---
 
+### M. Thread disposition, verdict hand-back, plain `gh` instead of GTG, no repo-local PR-comment scripts, Dolt-first beads templates (2026-09-22)
+**Change-set:** `0.12.0-fork.7`
+**Files:** `skills/pr-shepherd/SKILL.md`, `agents/pr-shepherd-agent.md`, `skills/handling-pr-comments/SKILL.md`, `commands/pr-shepherd.md` + `.claude/commands/pr-shepherd.md`, `commands/handle-pr-comments.md` + `.claude/commands/handle-pr-comments.md` (manually-kept identical pairs), `skills/start/SKILL.md`, `skills/status/SKILL.md`, `skills/setup/SKILL.md`, `templates/{task-completion-checklist,beads-readme,todo-management}.md` (+ generated `skills/setup/templates/` copies), `lib/sync-resources.js` (+ regenerated `commands/metaswarm/{pr-shepherd,handle-pr-comments,status}.toml`); **deleted** `bin/pr-comments-{check,filter}.sh`, `templates/gtg-workflow.yml` (+ their generated `skills/setup/` copies)
+
+Owner decisions (Eric, 2026-09-22) and agreed residuals, closing the gaps § L left:
+
+- **D1 — disposition, not resolution.** Every DONE/READY/exit criterion that required "all threads resolved / zero unresolved" now requires that **every review thread has a disposition** — fixed (with a reply) or declined with the reason in a reply — with any thread deliberately left open listed in the hand-back report. Resolving stays at the agent's discretion (§ L). The pr-shepherd and handling-pr-comments skills carry one GraphQL `reviewThreads` query that classifies each thread `NEEDS-DISPOSITION` / `OPEN-REPLIED` / `RESOLVED-NO-REPLY` / `RESOLVED`. Also removed `commands/handle-pr-comments.md`'s "Do NOT resolve threads — let reviewer verify", which contradicted § L.
+- **D2 — the skill ends at the hand-back.** "PR squash-merged to main" is gone from pr-shepherd's exit conditions; it hands back the one-line `Ready to merge (my assessment): YES — … / NO — …` verdict, merges only if the owner explicitly authorized that merge in the session, and never enables auto-merge unless asked. Phase 7 (post-merge knowledge extraction) runs only if a merge actually happened. `agents/pr-shepherd-agent.md` keeps its human-approves-the-merge handoff.
+- **D3 — plain `gh`, no `gtg`.** `gtg` isn't installed here; its section, state table, and `Merge Ready (gtg)` re-run are replaced by a `gh pr checks --json name,state,bucket` classifier plus the thread query, and a state table in those terms. **Verified on gh 2.83.1: with `--json`, `gh pr checks` exits 0 for passing, failing, and pending checks alike** — the documented 1/8 exit codes apply only to the plain-text form — so CI state is classified from `bucket`, and a non-zero exit means "no checks reported" (absent, not pending) or an error. `gtg` references also removed from `skills/start/SKILL.md` (merge-gate section), `skills/status/SKILL.md` (check #8, table row, recommendation), and the status TOML prompt. `templates/gtg-workflow.yml` deleted — no setup step ever installed it.
+- **R1** — removed pr-shepherd's "Post-Completion RAM Cleanup" (`/auto-ram-cleanup` doesn't exist in this fork).
+- **R2** — "ready to merge" completion wording in the pr-shepherd command and agent rephrased as the hand-back verdict, which requires the first-party round check.
+- **R3** — the task-completion checklist's `gh pr merge … --squash` + auto-merge step replaced with the verdict hand-back (merge only on explicit instruction; auto-merge only if asked).
+- **R4** — the repo-local `bin/pr-comments-{check,filter}.sh` scripts (off-canon: "any reply = addressed", CodeRabbit-only) and the non-existent `bin/pr-comments-out-of-scope.sh` are no longer called: replaced by inline `gh api` over the three REST surfaces (`issues/comments`, `pulls/comments`, `pulls/reviews`, `--paginate`), the PR body, and the GraphQL thread query, classifying all five bots plus humans. Scripts and the setup step that installed them deleted (nothing else called them).
+- **R5** — the generated `handle-pr-comments` TOML prompt names the right skill (`handling-pr-comments`) and describes disposition + materiality-gated re-rounds; the `pr-shepherd` TOML prompt no longer says "shepherd a PR to merge / report when ready to merge".
+- **R6** — Dolt-first commands ported from `~/Coding/knowledge_base/.claude/templates/`: claim with `bd update <id> --claim`, close with `bd close --reason`, push with `bd dolt push` only when a shared Dolt remote is configured. (bd 1.2.1 still has `bd sync`, now a full Dolt pull/push cycle that can adopt git `origin` as a Dolt remote — the change retires the *unconditional* default, it doesn't claim `bd sync` is gone.) The readme's "examples only" authority caveat is kept; kb-specific prose was not ported.
+
+> **Upstream-merge watch:** upstream still carries everything this section removed — `gtg` usage and `gtg-workflow.yml`, `bin/pr-comments-*.sh` and their setup step, "all threads resolved / zero unresolved" criteria, the "squash-merged to main" exit, `/auto-ram-cleanup`, and unconditional `bd sync`. On an upstream merge, keep them out.
+
+**Upstreamable: partial** — D1's disposition rule, D3's `gh` classifier (and the exit-code finding), R1, R4, and R5 are generic; D2's authorization boundary and R6's Dolt-first default reflect this owner's policy.
+
+---
+
 ## Upstream Sync Procedure
 
 When a new upstream tag is available:
 
 1. `git fetch upstream`
 2. `git merge upstream/main` (or `git rebase custom` onto the new upstream tag) into `custom`
-3. Resolve conflicts — note that `skills/pr-shepherd/SKILL.md`, `skills/handling-pr-comments/SKILL.md`, `skills/plan-review-gate/SKILL.md`, and `skills/orchestrated-execution/SKILL.md` each carry multiple groups (B+G+K+K.1+L, B+C+E2+K+K.1+L, D+H, D+H respectively), so cherry-picking upstreamable groups will produce conflicts in shared files
+3. Resolve conflicts — note that `skills/pr-shepherd/SKILL.md`, `skills/handling-pr-comments/SKILL.md`, `skills/plan-review-gate/SKILL.md`, and `skills/orchestrated-execution/SKILL.md` each carry multiple groups (B+G+K+K.1+L+M, B+C+E2+K+K.1+L+M, D+H, D+H respectively), and § M also touches `skills/start`, `skills/status`, `skills/setup`, `templates/`, `bin/`, and `lib/sync-resources.js`, so cherry-picking upstreamable groups will produce conflicts in shared files
 4. `node lib/sync-resources.js --sync` to regenerate co-located copies
 5. `node lib/sync-resources.js --check` — must pass before tagging
 6. Bump `fork.N` in all 5 version files
