@@ -523,7 +523,7 @@ Use the `Monitor` tool to watch for CI/CD state changes — see the pr-shepherd 
 ```text
 PR_NUMBER=XXX
 # Invoke the Monitor tool against PR_NUMBER (canonical script lives in the pr-shepherd skill).
-# It emits a chat event whenever CI status, comments, or reviews change, and exits on CI_COMPLETE
+# It stays silent while CI runs and emits once, on CI_COMPLETE
 # (a CI signal only — not a bot-review or merge-readiness verdict; verify bot rounds separately,
 # per the pr-shepherd skill § "Awaiting a bot's review round").
 ```
